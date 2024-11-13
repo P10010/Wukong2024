@@ -26,16 +26,38 @@ void PBD::initializeFromFile(const std::string& filename) {
     v(i)=0;
 }
 
+void PBD::projectConstraints()
+{
+  //todo implement this function
+  //this function should solve the constraints for the current state of the system
+  //it should update the positions of the vertices in the x vector
+}
+
 bool PBD::advanceOneStep(int step)
 {
+  // Pre-solve: apply external forces
+  // todo: also apply other external forces
   int nRows=currentV.size();
-  for(int i=0;i<nRows;i++)
-    v(i)+=dt*g;
+  for(int i=0;i<nRows;i++) {
+    v(i) += dt * g;
+    p(i) = x(i);
+    // explicit Euler integration
+    x(i) += dt * v(i);
+  }
 
-  //todo line 6, damp velocities
-  for(int i=0;i<nRows;i++)
-    //todo this should update p(i), not currentV(i)
-    currentV(i)+=dt*v(i);
+  // damp velocities? potentially not necessary?
+
+  // Solve constraints
+  for (size_t i = 0; i < numIterations; i++)
+  {
+    projectConstraints();
+  }
+  
+
+  // Post-solve: update velocities
+  for(int i=0;i<nRows;i++) {
+    v(i) = (x(i) - p(i)) / dt;
+  }
 
   if(step==10)
     return true;

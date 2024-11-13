@@ -35,12 +35,15 @@ public:
 	using TM = Matrix<T, 3, 3>;
 
 public:
-		VectorXi faces;
-		VectorXT atRest;
+	VectorXi faces;
+	VectorXT atRest;
     VectorXT currentV;
 
     //velocities
     VectorXT v;
+
+	//positions
+	VectorXT p, x;
 
     //vector with 1/mass of each vertex
     VectorXT w;
@@ -51,8 +54,13 @@ public:
     //gravitational acceleration
     T g=9.81;
 
+	//number of iterations to solve the constraints
+	size_t numIterations = 10;
+
 public:
-		void initializeFromFile(const std::string& filename);
+	void initializeFromFile(const std::string& filename);
+
+	void projectConstraints();
 
     bool advanceOneStep(int step);
 public:
