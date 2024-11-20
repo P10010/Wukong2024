@@ -8,6 +8,8 @@
 #include <fstream>
 #include "VecMatDef.h"
 
+using namespace VMD;
+
 inline bool fileExist (const std::string& name) {
     std::ifstream f(name.c_str());
     return f.good();
