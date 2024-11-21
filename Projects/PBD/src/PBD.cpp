@@ -64,16 +64,23 @@ void PBD::initializeFromFile(const std::string& filename)
             TV n1, n2;
             n1 = normals.row(i);
             n2 = normals.row(TT(i, j));
-            dihedral_angles(i, j) = n1.dot(n2);
+            dihedral_angles(i, j) = std::acos(n1.dot(n2));
         }
     }
 
     v = MatrixXT::Zero(nRows, 3);
 
+    // pinned diagonal
+    // posConstraintsIdxs.resize(2);
+    // posConstraintsIdxs << 9, 90;
+    // posConstraintsV.resize(2, 3);
+    // posConstraintsV << -0.3, 0.0, 0.0, 0.0, 0.3, 0.0;
+
+    // pinned horizontal
     posConstraintsIdxs.resize(2);
-    posConstraintsIdxs << 9, 90;
+    posConstraintsIdxs << 0, 90;
     posConstraintsV.resize(2, 3);
-    posConstraintsV << -0.3, 0.0, 0.0, 0.0, 0.3, 0.0;
+    posConstraintsV << 0.0, 0.0, 0.0, 0.0, 0.3, 0.0;
 }
 
 void PBD::stretchingConstraints(int solver_it)
@@ -89,32 +96,29 @@ void PBD::stretchingConstraints(int solver_it)
         p1 = p.row(a);
         p2 = p.row(b);
 
-        TV dp1 = -w(a) / (w(a) + w(b)) * ((p1 - p2).norm() - l0) *
-                 (p1 - p2).normalized();
-        TV dp2 = w(b) / (w(a) + w(b)) * ((p1 - p2).norm() - l0) *
-                 (p1 - p2).normalized();
+        TV dp1 = -w(a) / (w(a) + w(b)) * ((p1 - p2).norm() - l0) * (p1 - p2).normalized();
+        TV dp2 = w(b) / (w(a) + w(b)) * ((p1 - p2).norm() - l0) * (p1 - p2).normalized();
 
-        T alpha = (1. - std::pow(1. - k_stretch, 1. / solver_it));
+        T alpha = 1. - std::pow(1. - k_stretch, 1. / solver_it);
         p.row(a) += dp1 * alpha;
         p.row(b) += dp2 * alpha;
     }
 }
 
-// FIXME: doesn't work
 void PBD::bendingConstraints(int solver_it)
 {
     for (int f = 0; f < faces.rows(); f++)
     {
         for (int e = 0; e < 3; e++)
         {
-            int fp = TT(f, e); // adjacent face to fp opposite to edge e in {0, 1, 2}
+            int fp = TT(f, e); // adjacent face to fp opposite to edge e
             // skip adjacent face if we have already processed it (or if -1)
             if (fp < f) continue;
 
             int p1i, p2i, p3i, p4i;
-            p1i = faces(f, e);
-            p2i = faces(f, (e + 1) % 3);
-            p3i = faces(f, (e + 2) % 3);
+            p1i = faces(f, (e + 2) % 3);
+            p2i = faces(f, (e + 0) % 3);
+            p3i = faces(f, (e + 1) % 3);
             for (int j = 0; j < 3; j++)
             {
                 if (faces(fp, j) != p1i && faces(fp, j) != p2i && faces(fp, j) != p3i)
@@ -129,35 +133,40 @@ void PBD::bendingConstraints(int solver_it)
             p2 = p.row(p2i);
             p3 = p.row(p3i);
             p4 = p.row(p4i);
+            // substract p1 to make calculations easier
+            p2 -= p1;
+            p3 -= p1;
+            p4 -= p1;
 
             TV n1, n2;
             n1 = p2.cross(p3).normalized();
             n2 = p2.cross(p4).normalized();
 
-            T d = n1.dot(n2);
+            T d = std::min(1.0, n1.dot(n2));
 
             TV q1, q2, q3, q4;
             q3 = (p2.cross(n2) + n1.cross(p2) * d) / p2.cross(p3).norm();
             q4 = (p2.cross(n1) + n2.cross(p2) * d) / p2.cross(p4).norm();
-            q2 = -(p3.cross(n2) + n2.cross(p3) * d) / p2.cross(p3).norm() -
+            q2 = -(p3.cross(n2) + n1.cross(p3) * d) / p2.cross(p3).norm() -
                  (p4.cross(n1) + n2.cross(p4) * d) / p2.cross(p4).norm();
             q1 = -q2 - q3 - q4;
-            std::list<TV> qs = {q1, q2, q3, q4};
 
             T sum_qnorm2 = q1.squaredNorm() + q2.squaredNorm() +
                            q3.squaredNorm() + q4.squaredNorm();
+            if (sum_qnorm2 == 0) continue;
             T sum_w = w(p1i) + w(p2i) + w(p3i) + w(p4i);
-            T sqrt_1md2 = std::sqrt(1 - d * d);
+            T sqrt_1md2 = std::sqrt(1.0 - d * d);
             T acosd = std::acos(d);
             T phi0 = dihedral_angles(f, e);
 
-            TV dp1, dp2, dp3, dp4;
-            dp1 = -4 * w(p1i) / sum_w * (acosd - phi0) / sum_qnorm2 * q1;
-            dp2 = -4 * w(p2i) / sum_w * (acosd - phi0) / sum_qnorm2 * q2;
-            dp3 = -4 * w(p3i) / sum_w * (acosd - phi0) / sum_qnorm2 * q3;
-            dp4 = -4 * w(p4i) / sum_w * (acosd - phi0) / sum_qnorm2 * q4;
+            T alpha = 1. - std::pow(1. - k_bend, 1. / solver_it);
 
-            T alpha = (1. - std::pow(1. - k_bend, 1. / solver_it));
+            TV dp1, dp2, dp3, dp4;
+            dp1 = -4 * w(p1i) / sum_w * sqrt_1md2 * (acosd - phi0) / sum_qnorm2 * q1;
+            dp2 = -4 * w(p2i) / sum_w * sqrt_1md2 * (acosd - phi0) / sum_qnorm2 * q2;
+            dp3 = -4 * w(p3i) / sum_w * sqrt_1md2 * (acosd - phi0) / sum_qnorm2 * q3;
+            dp4 = -4 * w(p4i) / sum_w * sqrt_1md2 * (acosd - phi0) / sum_qnorm2 * q4;
+
             p.row(p1i) += dp1 * alpha;
             p.row(p2i) += dp2 * alpha;
             p.row(p3i) += dp3 * alpha;
@@ -173,6 +182,11 @@ void PBD::positionConstraints()
         int idx = posConstraintsIdxs[i];
         p.row(idx) = posConstraintsV.row(i);
     }
+    for (int i = 0; i < p.rows(); ++i)
+    {
+        // floor at z=-1/4
+        p(i, 2) = std::max(p(i, 2), -0.25);
+    }
 }
 
 void PBD::projectConstraints(int solver_it)
@@ -180,8 +194,7 @@ void PBD::projectConstraints(int solver_it)
 
     PBD::stretchingConstraints(solver_it);
 
-    // FIXME: fix bending constraints
-    // PBD::bendingConstraints(solver_it);
+    PBD::bendingConstraints(solver_it);
 
     // TODO: collision constraints
 

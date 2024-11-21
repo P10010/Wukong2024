@@ -66,8 +66,8 @@ public:
 
     // TODO: use, make parameter in GUI
     // stiffness parameters
-    T k_bend = 1.0;
-    T k_stretch = 1.0;
+    T k_stretch = 0.5;
+    T k_bend = 0.25;
 
     // gravitational acceleration, (3 x 1)
     TV g = {0.0, 0.0, -9.81};
