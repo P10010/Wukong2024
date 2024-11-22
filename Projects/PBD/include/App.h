@@ -86,6 +86,7 @@ public:
         // Activate/Deactivate constraints
         ImGui::Checkbox("Stretching Constraints", &simulation.stretchingConstraintsActivated);
         ImGui::Checkbox("Bending Constraints", &simulation.bendingConstraintsActivated);
+        ImGui::Checkbox("Collision Constraints", &simulation.collisionConstraintsActivated);
         ImGui::Checkbox("Position Constraints", &simulation.positionConstraintsActivated);
 
         if (!animate_modes && run_sim)

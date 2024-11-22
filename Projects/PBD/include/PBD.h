@@ -32,6 +32,18 @@ public:
     using IV2 = VMD::Vector<int, 2>;
     using TM = VMD::Matrix<T, 3, 3>;
 
+    // data structure for collision constraints
+    struct CollisionConstraint
+    {
+        int qIdx; // vertex
+
+        IV f; // face
+
+        TV n; // normal
+
+        T d; // penetration depth
+    };
+
 public:
     std::string scene;        // path to the obj file
     MatrixXi faces;           // (F x 3)
@@ -49,12 +61,6 @@ public:
     // positions, (V x 3)
     MatrixXT p;
 
-    // position contraints
-    // indices, (V' x 1)
-    VectorXi posConstraintsIdxs;
-    // vertex positions, (V' x 3)
-    MatrixXT posConstraintsV;
-
     // vector with 1/mass of each vertex, (V x 1)
     VectorXT w;
 
@@ -63,6 +69,9 @@ public:
 
     // cloth density [kg/m^2]
     T rho = 1.0;
+
+    // cloth thickness [m]
+    T h = 0.01;
 
     // stiffness parameters
     T k_stretch = 0.5;
@@ -74,10 +83,19 @@ public:
     // number of iterations to solve the constraints
     size_t numIterations = 10;
 
+    // collision constraints
+    std::vector<CollisionConstraint> collisionConstraintsList;
+
+    // position contraints
+    // indices, (V' x 1)
+    VectorXi posConstraintsIdxs;
+    // vertex positions, (V' x 3)
+    MatrixXT posConstraintsV;
 
 public:
     bool stretchingConstraintsActivated = true;
     bool bendingConstraintsActivated = true;
+    bool collisionConstraintsActivated = true;
     bool positionConstraintsActivated = true;
 
 public:
@@ -86,6 +104,10 @@ public:
     void stretchingConstraints(int solver_it);
 
     void bendingConstraints(int solver_it);
+
+    void generateCollisionConstraints();
+
+    void collisionConstraints();
 
     void positionConstraints();
 

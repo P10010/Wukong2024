@@ -72,16 +72,16 @@ void PBD::initializeFromFile(const std::string& filename)
     v = MatrixXT::Zero(nRows, 3);
 
     // pinned diagonal
-    // posConstraintsIdxs.resize(2);
-    // posConstraintsIdxs << 9, 90;
-    // posConstraintsV.resize(2, 3);
-    // posConstraintsV << -0.3, 0.0, 0.0, 0.0, 0.3, 0.0;
+    posConstraintsIdxs.resize(2);
+    posConstraintsIdxs << 9, 90;
+    posConstraintsV.resize(2, 3);
+    posConstraintsV << -0.3, 0.0, 0.0, 0.0, 0.3, 0.0;
 
     // pinned horizontal
-    posConstraintsIdxs.resize(2);
-    posConstraintsIdxs << 0, 90;
-    posConstraintsV.resize(2, 3);
-    posConstraintsV << 0.0, 0.0, 0.0, 0.0, 0.3, 0.0;
+    // posConstraintsIdxs.resize(2);
+    // posConstraintsIdxs << 0, 90;
+    // posConstraintsV.resize(2, 3);
+    // posConstraintsV << 0.0, 0.0, 0.0, 0.0, 0.3, 0.0;
 }
 
 void PBD::stretchingConstraints(int solver_it)
@@ -176,6 +176,67 @@ void PBD::bendingConstraints(int solver_it)
     }
 }
 
+void PBD::generateCollisionConstraints()
+{
+    // Clear previous collision constraints
+    collisionConstraintsList.clear();
+
+    // TODO: maybe use spatial hashing as described in the paper to speed up this process
+
+    // Iterate through all vertices
+    for (int i = 0; i < p.rows(); ++i)
+    {
+        // Iterate through all triangles
+        for (int f = 0; f < faces.rows(); f++)
+        {
+            int t1 = faces(f, 0), t2 = faces(f, 1), t3 = faces(f, 2);
+            TV q = p.row(i);
+            TV p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
+
+            // Compute triangle normal
+            TV n = (p2 - p1).cross(p3 - p1).normalized();
+            T dist = (q - p1).dot(n);
+
+            if (dist < h) // Penetration detected
+            {
+                CollisionConstraint constraint;
+                constraint.qIdx = i;
+                constraint.f = faces.row(f);
+                constraint.n = n;
+                constraint.d = h - dist;
+
+                collisionConstraintsList.push_back(constraint);
+            }
+        }
+    }
+}
+
+void PBD::collisionConstraints()
+{
+    for (const auto& constraint : collisionConstraintsList) 
+    {
+        int t1 = constraint.f(0), t2 = constraint.f(1), t3 = constraint.f(2);
+
+        TV q = p.row(constraint.qIdx);
+        TV p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
+        TV n = constraint.n;
+
+        // Project the vertex and triangle vertices to satisfy the constraint
+        T w_q = w(constraint.qIdx);
+        T w_p1 = w(t1), w_p2 = w(t2), w_p3 = w(t3);
+
+        T sum_w = w_q + w_p1 + w_p2 + w_p3;
+        if (sum_w == 0) continue;
+
+        TV dp = constraint.d * n / sum_w;
+
+        p.row(constraint.qIdx) += dp * w_q;
+        p.row(t1) -= dp * w_p1;
+        p.row(t2) -= dp * w_p2;
+        p.row(t3) -= dp * w_p3;
+    }
+}
+
 void PBD::positionConstraints()
 {
     for(int i = 0; i < posConstraintsIdxs.rows(); ++i)
@@ -198,7 +259,8 @@ void PBD::projectConstraints(int solver_it)
     if (bendingConstraintsActivated)
         PBD::bendingConstraints(solver_it);
 
-    // TODO: collision constraints
+    if (collisionConstraintsActivated)
+        PBD::collisionConstraints();
 
     if (positionConstraintsActivated)
         PBD::positionConstraints();
@@ -223,6 +285,8 @@ bool PBD::advanceOneStep(int step)
     }
 
     // generate collision constraints
+    if (collisionConstraintsActivated)
+        PBD::generateCollisionConstraints();
 
     // Solve constraints
     for (int it = 0; it < numIterations; it++)
