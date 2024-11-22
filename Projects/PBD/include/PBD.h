@@ -60,11 +60,9 @@ public:
     // time step
     T dt = 0.01;
 
-    // TODO: use, make parameter in GUI
     // cloth density [kg/m^2]
     T rho = 1.0;
 
-    // TODO: use, make parameter in GUI
     // stiffness parameters
     T k_stretch = 0.5;
     T k_bend = 0.25;
@@ -72,7 +70,6 @@ public:
     // gravitational acceleration, (3 x 1)
     TV g = {0.0, 0.0, -9.81};
 
-    // TODO: make parameter in GUI?
     // number of iterations to solve the constraints
     size_t numIterations = 10;
 

@@ -55,10 +55,33 @@ public:
     }
     void sceneCallback()
     {
-        if (ImGui::Button("RunSim"))
+        if (ImGui::Button("Toggle Simulation"))
         {
-            run_sim = true;
+            run_sim = !run_sim;
         }
+
+        // Reset Simulation
+        if (ImGui::Button("Reset Simulation"))
+        {
+            simulation.initializeFromFile("../../../Projects/DiscreteShell/data/grid.obj");
+            run_sim = false;
+        }
+
+        // Change stiffness and bend parameters
+        const double min = 0.0;
+        const double max = 1.0;
+        ImGui::SliderScalar("Stiffness", ImGuiDataType_Double, &simulation.k_stretch, &min, &max, "%.2f");
+        ImGui::SliderScalar("Bend", ImGuiDataType_Double, &simulation.k_bend, &min, &max, "%.2f");
+
+        // Change rho
+        const double min_rho = 0.0;
+        const double max_rho = 10.0;
+        ImGui::SliderScalar("Density", ImGuiDataType_Double, &simulation.rho, &min_rho, &max_rho, "%.2f");
+
+        // Change number of iterations
+        const size_t min_iter = 0;
+        const size_t max_iter = 100;
+        ImGui::SliderScalar("Iterations", ImGuiDataType_U64, &simulation.numIterations, &min_iter, &max_iter, "%d");
 
         if (!animate_modes && run_sim)
         {
