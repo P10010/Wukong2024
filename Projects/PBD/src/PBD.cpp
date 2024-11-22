@@ -8,9 +8,10 @@
 #include "../include/Util.h"
 void PBD::initializeFromFile(const std::string& filename)
 {
+    scene = filename.data();
     MatrixXT V;
     MatrixXi F;
-    igl::readOBJ(filename, V, F);
+    igl::readOBJ(scene, V, F);
 
     // TODO: necessary?
     // these functions copy the V, F, that is, what was read on the obj, to the
@@ -191,14 +192,16 @@ void PBD::positionConstraints()
 
 void PBD::projectConstraints(int solver_it)
 {
+    if (stretchingConstraintsActivated)    
+        PBD::stretchingConstraints(solver_it);
 
-    PBD::stretchingConstraints(solver_it);
-
-    PBD::bendingConstraints(solver_it);
+    if (bendingConstraintsActivated)
+        PBD::bendingConstraints(solver_it);
 
     // TODO: collision constraints
 
-    PBD::positionConstraints();
+    if (positionConstraintsActivated)
+        PBD::positionConstraints();
 }
 
 bool PBD::advanceOneStep(int step)

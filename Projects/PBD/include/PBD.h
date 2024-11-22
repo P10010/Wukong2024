@@ -33,6 +33,7 @@ public:
     using TM = VMD::Matrix<T, 3, 3>;
 
 public:
+    std::string scene;        // path to the obj file
     MatrixXi faces;           // (F x 3)
     MatrixXi TT;              // triangle-triangle adjacencies, (F x 3)
     MatrixXi TTi;             // triangle-triangle adjacencies, (F x 3)
@@ -72,6 +73,12 @@ public:
 
     // number of iterations to solve the constraints
     size_t numIterations = 10;
+
+
+public:
+    bool stretchingConstraintsActivated = true;
+    bool bendingConstraintsActivated = true;
+    bool positionConstraintsActivated = true;
 
 public:
     void initializeFromFile(const std::string& filename);

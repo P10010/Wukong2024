@@ -1,13 +1,17 @@
 #include "../include/App.h"
 #include "../include/PBD.h"
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc != 2)
+    {
+        std::cerr << "Usage: " << argv[0] << " <path to obj file>" << std::endl;
+        return 1;
+    }
 
     PBD pbd;
-    // todo this is temporary, it's probably better to copy the obj in the PBD
-    // folder if we keep using it
-    pbd.initializeFromFile("../../../Projects/DiscreteShell/data/grid.obj");
+
+    pbd.initializeFromFile(argv[1]);
 
     App<PBD> app(pbd);
     app.initializeScene();

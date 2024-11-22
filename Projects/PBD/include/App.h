@@ -63,14 +63,14 @@ public:
         // Reset Simulation
         if (ImGui::Button("Reset Simulation"))
         {
-            simulation.initializeFromFile("../../../Projects/DiscreteShell/data/grid.obj");
+            simulation.initializeFromFile(simulation.scene);
             run_sim = false;
         }
 
-        // Change stiffness and bend parameters
+        // Change stretching and bend parameters
         const double min = 0.0;
         const double max = 1.0;
-        ImGui::SliderScalar("Stiffness", ImGuiDataType_Double, &simulation.k_stretch, &min, &max, "%.2f");
+        ImGui::SliderScalar("Stretching", ImGuiDataType_Double, &simulation.k_stretch, &min, &max, "%.2f");
         ImGui::SliderScalar("Bend", ImGuiDataType_Double, &simulation.k_bend, &min, &max, "%.2f");
 
         // Change rho
@@ -82,6 +82,11 @@ public:
         const size_t min_iter = 0;
         const size_t max_iter = 100;
         ImGui::SliderScalar("Iterations", ImGuiDataType_U64, &simulation.numIterations, &min_iter, &max_iter, "%d");
+
+        // Activate/Deactivate constraints
+        ImGui::Checkbox("Stretching Constraints", &simulation.stretchingConstraintsActivated);
+        ImGui::Checkbox("Bending Constraints", &simulation.bendingConstraintsActivated);
+        ImGui::Checkbox("Position Constraints", &simulation.positionConstraintsActivated);
 
         if (!animate_modes && run_sim)
         {
