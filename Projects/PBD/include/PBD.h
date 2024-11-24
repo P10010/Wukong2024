@@ -42,6 +42,8 @@ public:
         TV n; // normal
 
         T d; // penetration depth
+
+        TV gradq, gradp1, gradp2, gradp3; //gradients of collision constraint
     };
 
 public:
