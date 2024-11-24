@@ -39,8 +39,6 @@ public:
 
         IV f; // face
 
-        TV n; // normal
-
         T d; // penetration depth
 
         TV gradq, gradp1, gradp2, gradp3; //gradients of collision constraint
@@ -84,6 +82,9 @@ public:
 
     // number of iterations to solve the constraints
     size_t numIterations = 10;
+
+    // number of steps (outer loop)
+    size_t nSteps=1000;
 
     // collision constraints
     std::vector<CollisionConstraint> collisionConstraintsList;

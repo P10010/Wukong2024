@@ -64,6 +64,7 @@ public:
         if (ImGui::Button("Reset Simulation"))
         {
             simulation.initializeFromFile(simulation.scene);
+            initializeScene();
             run_sim = false;
         }
 
@@ -81,7 +82,16 @@ public:
         // Change number of iterations
         const size_t min_iter = 0;
         const size_t max_iter = 100;
-        ImGui::SliderScalar("Iterations", ImGuiDataType_U64, &simulation.numIterations, &min_iter, &max_iter, "%d");
+        ImGui::SliderScalar("Collision iterations", ImGuiDataType_U64, &simulation.numIterations, &min_iter, &max_iter, "%d");
+
+        // Change time step
+        const double dt_step=0.001,dt_stepfast=0.01;
+        ImGui::InputDouble("Time step [s]", &simulation.dt, dt_step, dt_stepfast);
+
+        // Change number of steps
+        const size_t min_steps = 50;
+        const size_t max_steps = 10000;
+        ImGui::SliderScalar("Steps", ImGuiDataType_U64, &simulation.nSteps, &min_steps, &max_steps, "%d");
 
         // Activate/Deactivate constraints
         ImGui::Checkbox("Stretching Constraints", &simulation.stretchingConstraintsActivated);
