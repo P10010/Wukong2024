@@ -91,8 +91,8 @@ public:
         ImGui::InputDouble("Time step [s]", &simulation.dt, dt_step, dt_stepfast);
 
         // Change number of steps
-        const size_t min_steps = 1;
-        const size_t max_steps = 1000;
+        const size_t min_steps = 5;
+        const size_t max_steps = 10000;
         ImGui::SliderScalar("Steps", ImGuiDataType_U64, &simulation.nSteps, &min_steps, &max_steps, "%d");
 
         // Activate/Deactivate constraints

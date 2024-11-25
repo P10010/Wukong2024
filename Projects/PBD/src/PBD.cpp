@@ -31,13 +31,15 @@ void PBD::initializeFromFile(const std::string& filename)
     currentV = atRest;
     int nRows = currentV.rows();
     p.resize(nRows, 3);
+    m.resize(nRows);
     w.resize(nRows);
     // TODO: put 1/mass, at the moment I set the mass to be 1 for every vertex
     // for every vertex i, it should be 1/3 of the mass of each adjacent
     // triangle
     for (int i = 0; i < nRows; i++)
     {
-        w(i) = 1;
+        m(i)=1;
+        w(i) = 1/m(i);
     }
 
     igl::edges(F, edges);
@@ -91,7 +93,7 @@ void PBD::initializeFromFile(const std::string& filename)
   // pinned horizontally in the middle
   int m=ceil(std::sqrt(nRows));
   int x=m/2;
-  int y=m/2+(m/4)*m;
+  int y=m/2+(m-3)*m;
 //  std::cout<<x<<" "<<y<<" "<<atRest.row(x)<<" "<<atRest.row(y)<<"\n";
   posConstraintsIdxs.resize(2);
   posConstraintsIdxs <<x,y;
@@ -367,6 +369,40 @@ void PBD::projectConstraints(int solver_it)
         PBD::positionConstraints();
 }
 
+void PBD::dampVelocities(T kDamping){
+    TV xCm = TV(0,0,0);
+    TV vCm=TV(0,0,0);
+    T mTot=m(0);
+    for(int i=0;i<currentV.rows();i++){
+        xCm+=currentV.row(i)*m(i);
+        vCm+=v.row(i)*m(i);
+        mTot+=m(i);
+    }
+    xCm/=mTot;
+    vCm/=mTot;
+    TV L=TV(0,0,0);
+    TM I;
+    I<<0,0,0,
+        0,0,0,
+        0,0,0;
+    MatrixXT  r(currentV.rows(),3);
+    for(int i=0;i<currentV.rows();i++){
+        TV ri=TV(currentV.row(i))-xCm;
+        L+=ri.cross(TV(v.row(i)*m(i)));
+        TM ridash;
+        ridash << 0, -ri.z(), ri.y(),
+                ri.z(),0,-ri.x(),
+                -ri.y(),ri.x(),0;
+        I+=ridash*ridash.transpose()*m(i);
+        r.row(i)=ri;
+    }
+    TV omega=I.inverse()*L;
+    for(int i=0;i<currentV.rows();i++){
+        TV deltaVi=vCm+omega.cross(TV(r.row(i))) - TV(v.row(i));
+        v.row(i)+=kDamping*deltaVi;
+    }
+
+}
 bool PBD::advanceOneStep(int step)
 {
 //    std::cout<<step<<"\n";
@@ -377,7 +413,7 @@ bool PBD::advanceOneStep(int step)
         v.row(i) += dt * g;
     }
 
-    // TODO: damp velocities? potentially not necessary?
+    dampVelocities(0.2);
 
     for (int i = 0; i < nRows; i++)
     {

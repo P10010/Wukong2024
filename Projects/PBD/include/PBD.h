@@ -64,6 +64,9 @@ public:
     // vector with 1/mass of each vertex, (V x 1)
     VectorXT w;
 
+    // vector with mass of each vertex, (V x 1)
+    VectorXT m;
+
     // time step
     T dt = 0.01;
 
@@ -116,11 +119,14 @@ public:
 
     void projectConstraints(int solver_it);
 
+    void dampVelocities(T kDamping);
+
     bool advanceOneStep(int step);
 
 public:
     PBD() {}
     ~PBD() {}
+
 };
 
 #endif
