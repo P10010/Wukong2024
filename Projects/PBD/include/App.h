@@ -57,6 +57,7 @@ public:
     {
         if (ImGui::Button("Toggle Simulation"))
         {
+          static_solve_step=0;
             run_sim = !run_sim;
         }
 
@@ -65,6 +66,7 @@ public:
         {
             simulation.initializeFromFile(simulation.scene);
             initializeScene();
+            static_solve_step=0;
             run_sim = false;
         }
 
@@ -89,8 +91,8 @@ public:
         ImGui::InputDouble("Time step [s]", &simulation.dt, dt_step, dt_stepfast);
 
         // Change number of steps
-        const size_t min_steps = 50;
-        const size_t max_steps = 10000;
+        const size_t min_steps = 1;
+        const size_t max_steps = 1000;
         ImGui::SliderScalar("Steps", ImGuiDataType_U64, &simulation.nSteps, &min_steps, &max_steps, "%d");
 
         // Activate/Deactivate constraints

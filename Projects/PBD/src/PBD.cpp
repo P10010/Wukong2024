@@ -76,12 +76,29 @@ void PBD::initializeFromFile(const std::string& filename)
 //    posConstraintsIdxs << 9, 90;
 //    posConstraintsV.resize(2, 3);
 //    posConstraintsV << -0.3, 0.0, 0.0, 0.0, 0.3, 0.0;
+//    w(9)=0;
+//    w(90)=0;
+//    std::cout<<nRows<<" "<<p.row(nRows/2)<<" "<<p.row(nRows-1)<<"\n";
 
     // pinned horizontal
-     posConstraintsIdxs.resize(2);
-     posConstraintsIdxs << 0, 90;
-     posConstraintsV.resize(2, 3);
-     posConstraintsV << 0.0, 0.0, 0.0, 0.0, 0.3, 0.0;
+//     posConstraintsIdxs.resize(2);
+//     posConstraintsIdxs << 0, 90;
+//     posConstraintsV.resize(2, 3);
+//     posConstraintsV << 0.0, 0.0, 0.0, 0.0, 0.3, 0.0;
+//     w(0)=0;
+//     w(90)=0;
+
+  // pinned horizontally in the middle
+  int m=ceil(std::sqrt(nRows));
+  int x=m/2;
+  int y=m/2+(m/4)*m;
+//  std::cout<<x<<" "<<y<<" "<<atRest.row(x)<<" "<<atRest.row(y)<<"\n";
+  posConstraintsIdxs.resize(2);
+  posConstraintsIdxs <<x,y;
+  posConstraintsV.resize(2, 3);
+  posConstraintsV << atRest.row(x), atRest.row(y);
+  w(x)=0;
+  w(y)=0;
 }
 
 void PBD::stretchingConstraints(int solver_it)
@@ -219,7 +236,9 @@ void PBD::generateCollisionConstraints()
               TV2 w12 = A.colPivHouseholderQr().solve(b);
               T w3 = 1 - w12[0] - w12[1];
               // δ is h divided by a characteristic length of the triangle, i.e. squared root of the area
-              T delta = h / (sqrt(abs(0.5 * (p2 - p1).cross(p3 - p1).norm())));
+              T area=0.5 * (p2 - p1).cross(p3 - p1).norm();
+              if(area==0) continue;
+              T delta = h / (sqrt(abs(area)));
               if (w12.x()>=-delta && w12.x()<=1+delta && w12.y()>=-delta && w12.y()<=1+delta && w3>=-delta && w3<=1+delta) // collision detected
               {
 //                  std::cout<<i<<" "<<f<<" "<<(p1-p2).norm()<<" "<<dist*fromBelow<<std::endl;
@@ -233,6 +252,7 @@ void PBD::generateCollisionConstraints()
                 TV dcrdp3x = {0, (p2 - p1).z(), -(p2 - p1).y()}, dcrdp3y = {-(p2 - p1).z(), 0, (p2 - p1).x()},
                         dcrdp3z = {(p2 - p1).y(), -(p2 - p1).x(), 0};
 
+                if(cr.squaredNorm()==0) continue;
                 T normCoef = -pow(cr.squaredNorm(), -1.5);
                 T normI = 1 / cr.norm();
                 TV dnormdp1 = { p1.x() * ((p3 - p2).z() * (p3 - p2).z() + (p3 - p2).y() * (p3 - p2).y()),
@@ -297,12 +317,14 @@ void PBD::collisionConstraints()
         T sum_w = w_q + w_p1 + w_p2 + w_p3;
         if (sum_w == 0) continue;
 
-        T s = constraint.d/(constraint.gradq.squaredNorm()+constraint.gradp1.squaredNorm()+constraint.gradp2.squaredNorm()+constraint.gradp3.squaredNorm());
-
+        T squaredGradientsSum=(constraint.gradq.squaredNorm()+constraint.gradp1.squaredNorm()+constraint.gradp2.squaredNorm()+constraint.gradp3.squaredNorm());
+        if(squaredGradientsSum==0) continue;
+        T s = constraint.d/squaredGradientsSum;
         //n in formula (8) is the number of points (involved in the constraint, so 4 here), NOT the normal vector
         T dp = -4*s / sum_w;
 
 //        std::cout<<"delta pos: "<<dp*w_q*constraint.gradq<<" "<<dp * w_p1 * constraint.gradp1<<" "<<dp * w_p2 * constraint.gradp2<<" "<<dp * w_p3 * constraint.gradp3<<std::endl;
+
         p.row(constraint.qIdx) += dp*w_q*constraint.gradq;
         p.row(t1) += dp * w_p1 * constraint.gradp1;
         p.row(t2) += dp * w_p2 * constraint.gradp2;
@@ -347,7 +369,7 @@ void PBD::projectConstraints(int solver_it)
 
 bool PBD::advanceOneStep(int step)
 {
-    std::cout<<step<<"\n";
+//    std::cout<<step<<"\n";
     // Pre-solve: apply external forces
     int nRows = currentV.rows();
     for (int i = 0; i < nRows; i++)
@@ -371,6 +393,9 @@ bool PBD::advanceOneStep(int step)
     for (int it = 0; it < numIterations; it++)
     {
         projectConstraints(it);
+//        for (int i = 0; i < nRows; i++)
+//          if((p.row(i) - currentV.row(i)).norm() * 1. / dt>10)
+//            std::cout<<(p.row(i) - currentV.row(i)).norm() * 1. / dt<<"\n";
     }
 
     // Post-solve: update velocities
