@@ -38,10 +38,6 @@ public:
         int qIdx; // vertex
 
         IV f; // face
-
-        T d; // penetration depth
-
-        TV gradq, gradp1, gradp2, gradp3; //gradients of collision constraint
     };
 
 public:
@@ -79,6 +75,9 @@ public:
     // stiffness parameters
     T k_stretch = 0.5;
     T k_bend = 0.25;
+
+    //damping parameter
+    T k_damping=0.1;
 
     // gravitational acceleration, (3 x 1)
     TV g = {0.0, 0.0, -9.81};

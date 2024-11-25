@@ -91,16 +91,33 @@ void PBD::initializeFromFile(const std::string& filename)
 //     w(90)=0;
 
   // pinned horizontally in the middle
-  int m=ceil(std::sqrt(nRows));
-  int x=m/2;
-  int y=m/2+(m-3)*m;
-//  std::cout<<x<<" "<<y<<" "<<atRest.row(x)<<" "<<atRest.row(y)<<"\n";
-  posConstraintsIdxs.resize(2);
-  posConstraintsIdxs <<x,y;
-  posConstraintsV.resize(2, 3);
-  posConstraintsV << atRest.row(x), atRest.row(y);
-  w(x)=0;
-  w(y)=0;
+//  int m=ceil(std::sqrt(nRows));
+//  int x=m/2;
+//  int y=m/2+(3)*m;
+////  std::cout<<x<<" "<<y<<" "<<atRest.row(x)<<" "<<atRest.row(y)<<"\n";
+//  posConstraintsIdxs.resize(2);
+//  posConstraintsIdxs <<x,y;
+//  posConstraintsV.resize(2, 3);
+//  posConstraintsV << atRest.row(x), atRest.row(y);
+//  w(x)=0;
+//  w(y)=0;
+
+  //more flexible way of introducing constraints... The current configuration exhibits well the effect of collision constraints
+  //since without them the cloth folds on itself and self intersects
+    int m=ceil(std::sqrt(nRows));
+    int x=m/2+m*2;
+
+    int nPosConstr=1;
+//    std::cout<<x+m*(nPosConstr-1)*2<<" "<<nRows<<"\n";
+    posConstraintsIdxs.resize(nPosConstr);
+    posConstraintsV.resize(nPosConstr, 3);
+    for(int i=0;i<nPosConstr;i++) {
+        int y=x+m*i*2;
+        posConstraintsIdxs(i)=y;
+        posConstraintsV.row(i)=atRest.row(y);
+//        std::cout<<x<<" "<<y<<" "<<atRest.row(y)<<"\n";
+        w(y)=0;
+    }
 }
 
 void PBD::stretchingConstraints(int solver_it)
@@ -244,58 +261,10 @@ void PBD::generateCollisionConstraints()
               if (w12.x()>=-delta && w12.x()<=1+delta && w12.y()>=-delta && w12.y()<=1+delta && w3>=-delta && w3<=1+delta) // collision detected
               {
 //                  std::cout<<i<<" "<<f<<" "<<(p1-p2).norm()<<" "<<dist*fromBelow<<std::endl;
-
-                  //I manually calculated the derivative, I know this code is pretty ugly, and probably it could be
-                //written in a more compact form. Hopefully the calculations are correct
-                TV dcrdp1x = {0, (p3 - p2).z(), -(p3 - p2).y()}, dcrdp1y = {-(p3 - p2).z(), 0, (p3 - p2).x()},
-                        dcrdp1z = {(p3 - p2).y(), -(p3 - p2).x(), 0};
-                TV dcrdp2x = {0, -(p3 - p1).z(), (p3 - p1).y()}, dcrdp2y = {(p3 - p1).z(), 0, -(p3 - p1).x()},
-                        dcrdp2z = {-(p3 - p1).y(), (p3 - p1).x(), 0};
-                TV dcrdp3x = {0, (p2 - p1).z(), -(p2 - p1).y()}, dcrdp3y = {-(p2 - p1).z(), 0, (p2 - p1).x()},
-                        dcrdp3z = {(p2 - p1).y(), -(p2 - p1).x(), 0};
-
-                if(cr.squaredNorm()==0) continue;
-                T normCoef = -pow(cr.squaredNorm(), -1.5);
-                T normI = 1 / cr.norm();
-                TV dnormdp1 = { p1.x() * ((p3 - p2).z() * (p3 - p2).z() + (p3 - p2).y() * (p3 - p2).y()),
-                                p1.y() * ((p3 - p2).z() * (p3 - p2).z() + (p3 - p2).x() * (p3 - p2).x()),
-                                p1.z() * ((p3 - p2).x() * (p3 - p2).x() + (p3 - p2).y() * (p3 - p2).y())};
-                dnormdp1 *= normCoef;
-
-                TV dnormdp2 = { p2.x() * ((p3 - p1).z() * (p3 - p1).z() + (p3 - p1).y() * (p3 - p1).y()),
-                                p2.y() * ((p3 - p1).z() * (p3 - p1).z() + (p3 - p1).x() * (p3 - p1).x()),
-                                p2.z() * ((p3 - p1).x() * (p3 - p1).x() + (p3 - p1).y() * (p3 - p1).y())};
-                dnormdp2 *= normCoef;
-
-                TV dnormdp3 = { p3.x() * ((p1 - p2).z() * (p1 - p2).z() + (p1 - p2).y() * (p1 - p2).y()),
-                                p3.y() * ((p1 - p2).z() * (p1 - p2).z() + (p1 - p2).x() * (p1 - p2).x()),
-                                p3.z() * ((p1 - p2).x() * (p1 - p2).x() + (p1 - p2).y() * (p1 - p2).y())};
-                dnormdp3 *= normCoef;
-
-
                 CollisionConstraint constraint;
                 constraint.qIdx = i;
                 constraint.f = faces.row(f);
-                constraint.d = fromBelow*dist - h;
-                constraint.gradq << fromBelow*n;
-                constraint.gradp1
-                          << fromBelow*(-n+dnormdp1*((q - p1).dot(cr))+
-                                        normI*TV(
-                                                (q - p1).dot(dcrdp1x),
-                                                (q - p1).dot(dcrdp1y),
-                                                (q - p1).dot(dcrdp1z)));
-                constraint.gradp2
-                          << fromBelow*(dnormdp2*((q - p1).dot(cr))+
-                                        normI*TV(
-                                                (q - p1).dot(dcrdp2x),
-                                                (q - p1).dot(dcrdp2y),
-                                                (q - p1).dot(dcrdp2z)));
-                constraint.gradp3
-                        << fromBelow*(dnormdp3*((q - p1).dot(cr))+
-                               normI*TV(
-                            (q - p1).dot(dcrdp3x),
-                         (q - p1).dot(dcrdp3y),
-                         (q - p1).dot(dcrdp3z)));
+
                 collisionConstraintsList.push_back(constraint);
               }
             }
@@ -305,7 +274,7 @@ void PBD::generateCollisionConstraints()
 
 void PBD::collisionConstraints()
 {
-    for (const auto& constraint : collisionConstraintsList) 
+    for (const auto& constraint : collisionConstraintsList)
     {
         int t1 = constraint.f(0), t2 = constraint.f(1), t3 = constraint.f(2);
 
@@ -319,24 +288,85 @@ void PBD::collisionConstraints()
         T sum_w = w_q + w_p1 + w_p2 + w_p3;
         if (sum_w == 0) continue;
 
-        T squaredGradientsSum=(constraint.gradq.squaredNorm()+constraint.gradp1.squaredNorm()+constraint.gradp2.squaredNorm()+constraint.gradp3.squaredNorm());
-        if(squaredGradientsSum==0) continue;
-        T s = constraint.d/squaredGradientsSum;
-        //n in formula (8) is the number of points (involved in the constraint, so 4 here), NOT the normal vector
-        T dp = -4*s / sum_w;
+        // Compute triangle normal
+        TV cr = (p2 - p1).cross(p3 - p1);
+        TV n = cr.normalized();
+        T dist = (q - p1).dot(n);
+
+        int fromBelow;
+        //check if vertex is from below with respect to the triangle normal (it should be correct)
+        if(dist<0) {
+            fromBelow=-1;
+        }
+        else
+            fromBelow=1;
+
+        if(fromBelow*dist<h) {
+            //I manually calculated the derivative, I know this code is pretty ugly, and probably it could be
+            //written in a more compact form. Hopefully the calculations are correct
+            TV dcrdp1x = {0, (p3 - p2).z(), -(p3 - p2).y()}, dcrdp1y = {-(p3 - p2).z(), 0, (p3 - p2).x()},
+                    dcrdp1z = {(p3 - p2).y(), -(p3 - p2).x(), 0};
+            TV dcrdp2x = {0, -(p3 - p1).z(), (p3 - p1).y()}, dcrdp2y = {(p3 - p1).z(), 0, -(p3 - p1).x()},
+                    dcrdp2z = {-(p3 - p1).y(), (p3 - p1).x(), 0};
+            TV dcrdp3x = {0, (p2 - p1).z(), -(p2 - p1).y()}, dcrdp3y = {-(p2 - p1).z(), 0, (p2 - p1).x()},
+                    dcrdp3z = {(p2 - p1).y(), -(p2 - p1).x(), 0};
+
+            if (cr.squaredNorm() == 0) continue;
+            T normCoef = -pow(cr.squaredNorm(), -1.5);
+            T normI = 1 / cr.norm();
+            TV dnormdp1 = {p1.x() * ((p3 - p2).z() * (p3 - p2).z() + (p3 - p2).y() * (p3 - p2).y()),
+                           p1.y() * ((p3 - p2).z() * (p3 - p2).z() + (p3 - p2).x() * (p3 - p2).x()),
+                           p1.z() * ((p3 - p2).x() * (p3 - p2).x() + (p3 - p2).y() * (p3 - p2).y())};
+            dnormdp1 *= normCoef;
+
+            TV dnormdp2 = {p2.x() * ((p3 - p1).z() * (p3 - p1).z() + (p3 - p1).y() * (p3 - p1).y()),
+                           p2.y() * ((p3 - p1).z() * (p3 - p1).z() + (p3 - p1).x() * (p3 - p1).x()),
+                           p2.z() * ((p3 - p1).x() * (p3 - p1).x() + (p3 - p1).y() * (p3 - p1).y())};
+            dnormdp2 *= normCoef;
+
+            TV dnormdp3 = {p3.x() * ((p1 - p2).z() * (p1 - p2).z() + (p1 - p2).y() * (p1 - p2).y()),
+                           p3.y() * ((p1 - p2).z() * (p1 - p2).z() + (p1 - p2).x() * (p1 - p2).x()),
+                           p3.z() * ((p1 - p2).x() * (p1 - p2).x() + (p1 - p2).y() * (p1 - p2).y())};
+            dnormdp3 *= normCoef;
+
+            T d = fromBelow * dist - h;
+            TV gradq, gradp1, gradp2, gradp3;
+            gradq << fromBelow * n;
+            gradp1
+                    << fromBelow * (-n + dnormdp1 * ((q - p1).dot(cr)) +
+                                    normI * TV(
+                                            (q - p1).dot(dcrdp1x),
+                                            (q - p1).dot(dcrdp1y),
+                                            (q - p1).dot(dcrdp1z)));
+            gradp2
+                    << fromBelow * (dnormdp2 * ((q - p1).dot(cr)) +
+                                    normI * TV(
+                                            (q - p1).dot(dcrdp2x),
+                                            (q - p1).dot(dcrdp2y),
+                                            (q - p1).dot(dcrdp2z)));
+            gradp3
+                    << fromBelow * (dnormdp3 * ((q - p1).dot(cr)) +
+                                    normI * TV(
+                                            (q - p1).dot(dcrdp3x),
+                                            (q - p1).dot(dcrdp3y),
+                                            (q - p1).dot(dcrdp3z)));
+
+            T squaredGradientsSum = (gradq.squaredNorm() + gradp1.squaredNorm() +
+                                     gradp2.squaredNorm() + gradp3.squaredNorm());
+            if (squaredGradientsSum == 0) continue;
+            T s = d / squaredGradientsSum;
+            //n in formula (8) is the number of points (involved in the constraint, so 4 here), NOT the normal vector
+            T dp = -4 * s / sum_w;
 
 //        std::cout<<"delta pos: "<<dp*w_q*constraint.gradq<<" "<<dp * w_p1 * constraint.gradp1<<" "<<dp * w_p2 * constraint.gradp2<<" "<<dp * w_p3 * constraint.gradp3<<std::endl;
 
-        p.row(constraint.qIdx) += dp*w_q*constraint.gradq;
-        p.row(t1) += dp * w_p1 * constraint.gradp1;
-        p.row(t2) += dp * w_p2 * constraint.gradp2;
-        p.row(t3) += dp * w_p3 * constraint.gradp3;
-
-//        TV cr = (p2 - p1).cross(p3 - p1);
-//        TV n = cr.normalized();
-//        T dist = (q - p1).dot(n);
+            p.row(constraint.qIdx) += dp * w_q * gradq;
+            p.row(t1) += dp * w_p1 * gradp1;
+            p.row(t2) += dp * w_p2 * gradp2;
+            p.row(t3) += dp * w_p3 * gradp3;
 
 //        std::cout<<constraint.d<<" "<<std::abs(dist)-h<<std::endl;
+        }
     }
 }
 
@@ -413,7 +443,7 @@ bool PBD::advanceOneStep(int step)
         v.row(i) += dt * g;
     }
 
-    dampVelocities(0.2);
+    dampVelocities(k_damping);
 
     for (int i = 0; i < nRows; i++)
     {

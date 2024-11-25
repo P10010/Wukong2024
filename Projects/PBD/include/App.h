@@ -70,11 +70,12 @@ public:
             run_sim = false;
         }
 
-        // Change stretching and bend parameters
+        // Change stretching, bend and damping parameters
         const double min = 0.0;
         const double max = 1.0;
         ImGui::SliderScalar("Stretching", ImGuiDataType_Double, &simulation.k_stretch, &min, &max, "%.2f");
         ImGui::SliderScalar("Bend", ImGuiDataType_Double, &simulation.k_bend, &min, &max, "%.2f");
+        ImGui::SliderScalar("Damping", ImGuiDataType_Double, &simulation.k_damping, &min, &max, "%.2f");
 
         // Change rho
         const double min_rho = 0.0;
