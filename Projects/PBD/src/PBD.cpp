@@ -72,7 +72,6 @@ void PBD::initializeFromFile(const std::string& filename)
     }
 
     v = MatrixXT::Zero(nRows, 3);
-
     // pinned diagonal
 //    posConstraintsIdxs.resize(2);
 //    posConstraintsIdxs << 9, 90;
@@ -212,64 +211,137 @@ void PBD::bendingConstraints(int solver_it)
     }
 }
 
+//check whether point q intersects the triangle with vertices p1, p2, p3
+bool PBD::pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3) const {
+  // Compute triangle normal
+  TV cr = (p2 - p1).cross(p3 - p1);
+  TV n = cr.normalized();
+  T dist = (q - p1).dot(n);
+
+  int fromBelow;
+  //check if vertex is from below with respect to the triangle normal (it should be correct)
+  if(dist<0) {
+    fromBelow=-1;
+  }
+  else
+    fromBelow=1;
+
+  //note: if dist is small the point is close to the plane containing the triangle,
+  //but I need to do some extra checks to verify that is actually close to the triangle
+  if(fromBelow*dist>h)
+    return false;
+
+  //calculate barycentric coordinates of projection into the plane (from Robust Treatment of Collisions, Contact and Friction for Cloth Animation)
+  TV x13 = p1 - p3, x23 = p2 - p3, x43 = q - p3;
+  TM2 A;
+  A << x13.dot(x13), x13.dot(x23), x13.dot(x23), x23.dot(x23);
+  TV2 b = {x13.dot(x43), x23.dot(x43)};
+  TV2 w12 = A.colPivHouseholderQr().solve(b);
+  T w3 = 1 - w12[0] - w12[1];
+  // δ is h divided by a characteristic length of the triangle, i.e. squared root of the area
+  T area=0.5 * cr.norm();
+  if(area==0) return false;
+  T delta = h / (sqrt(abs(area)));
+  return (w12.x()>=-delta && w12.x()<=1+delta && w12.y()>=-delta && w12.y()<=1+delta && w3>=-delta && w3<=1+delta); // collision detected
+}
+
+int PBD::hash(int i, int j, int k, int n){
+  int64_t longI=i, longJ=j, longK=k;
+  int64_t hashVal=((longI*prime1) ^ (longJ*prime2) ^ (longK*prime3));
+  hashVal%=n;
+  return hashVal;
+}
+int PBD::hash(PBD::TV p, T l, int n, TV& minCoord){
+  int i=std::floor((p.x()-minCoord.x())/l), j=std::floor((p.y()-minCoord.y())/l), k=std::floor((p.z()-minCoord.z())/l);
+  return hash(i,j,k,n);
+}
+
+void PBD::hashVertices(std::vector<std::vector<int>> &hashTable, T boxSize, TV& minCoord) {
+  int n=hashTable.size();
+  for (int i = 0; i < p.rows(); ++i){
+    TV q = p.row(i);
+    int hashVal=hash(q,boxSize,n,minCoord);
+    hashTable[hashVal].push_back(i);
+//    if(hashTable[hashVal].size()>10)
+//      std::cout<<hashTable[hashVal].size()<<"\n";
+  }
+}
+
+void PBD::spatialHashing() {
+  TV minCoord=p.row(0),maxCoord=p.row(0);
+  for (int i = 0; i < p.rows(); ++i)
+    for(int j=0;j<3;j++){
+      if(p(i,j)<minCoord(j))
+        minCoord(j)=p(i,j);
+      if(p(i,j)>maxCoord(j))
+        maxCoord(j)=p(i,j);
+    }
+
+//  T coeff=1;//(pow(p.rows(),T(0.33)));
+//  T boxSize=((maxCoord-minCoord).maxCoeff())/coeff;
+  T boxSize=2*h;
+  int n=4*p.rows();
+  std::vector<std::vector<int>> hashTable(n);
+  hashVertices(hashTable,boxSize,minCoord);
+
+  for (int f = 0; f < faces.rows(); f++) {
+    int t1 = faces(f, 0), t2 = faces(f, 1), t3 = faces(f, 2);
+    TM triangleVertices;
+    TV p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
+    triangleVertices <<p1,p2,p3;
+    std::array<int,3> minBox, maxBox;
+    for(int i=0; i<3 ; i++) {
+      TV tmp=triangleVertices.row(i);
+      minBox[i]=(int)std::floor((triangleVertices.row(i).minCoeff()-minCoord(i))/boxSize);
+              //std::max(0,(int)std::floor((triangleVertices.row(i).minCoeff()-minCoord(i))/boxSize)-1);
+      maxBox[i]=(int)std::floor((triangleVertices.row(i).maxCoeff()-minCoord(i))/boxSize);
+    }
+
+
+    for(int i=minBox[0];i<=maxBox[0];i++)
+      for(int j=minBox[1];j<=maxBox[1];j++)
+        for(int k=minBox[2];k<=maxBox[2];k++){
+          int hashVal=hash(i,j,k,n);
+          for(int qIdx : hashTable[hashVal])
+            if(qIdx!=t1 && qIdx!=t2 && qIdx!=t3 && pointIntersectsTriangle(p.row(qIdx),p1,p2,p3)) {
+              CollisionConstraint constraint;
+              constraint.qIdx = qIdx;
+              constraint.f = faces.row(f);
+              collisionConstraintsList.push_back(constraint);
+            }
+        }
+
+  }
+
+}
 void PBD::generateCollisionConstraints()
 {
     // Clear previous collision constraints
     collisionConstraintsList.clear();
 
-    // TODO: maybe use spatial hashing as described in the paper to speed up this process
+    spatialHashing();
 
     // Iterate through all vertices
-    for (int i = 0; i < p.rows(); ++i)
-    {
-        // Iterate through all triangles
-        for (int f = 0; f < faces.rows(); f++)
-        {
-            int t1 = faces(f, 0), t2 = faces(f, 1), t3 = faces(f, 2);
-            if(t1==i || t2==i || t3==i)
-              continue;
-            TV q = p.row(i);
-            TV p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
-
-            // Compute triangle normal
-            TV cr = (p2 - p1).cross(p3 - p1);
-            TV n = cr.normalized();
-            T dist = (q - p1).dot(n);
-
-            int fromBelow;
-            //check if vertex is from below with respect to the triangle normal (it should be correct)
-            if(dist<0) {
-                fromBelow=-1;
-            }
-            else
-                fromBelow=1;
-
-            //note: if dist is small the point is close to the plane containing the triangle,
-            //but I need to do some extra checks to verify that is actually close to the triangle
-            if(fromBelow*dist<h) {
-              //calculate barycentric coordinates of projection into the plane (from Robust Treatment of Collisions, Contact and Friction for Cloth Animation)
-              TV x13 = p1 - p3, x23 = p2 - p3, x43 = q - p3;
-              TM2 A;
-              A << x13.dot(x13), x13.dot(x23), x13.dot(x23), x23.dot(x23);
-              TV2 b = {x13.dot(x43), x23.dot(x43)};
-              TV2 w12 = A.colPivHouseholderQr().solve(b);
-              T w3 = 1 - w12[0] - w12[1];
-              // δ is h divided by a characteristic length of the triangle, i.e. squared root of the area
-              T area=0.5 * (p2 - p1).cross(p3 - p1).norm();
-              if(area==0) continue;
-              T delta = h / (sqrt(abs(area)));
-              if (w12.x()>=-delta && w12.x()<=1+delta && w12.y()>=-delta && w12.y()<=1+delta && w3>=-delta && w3<=1+delta) // collision detected
-              {
-//                  std::cout<<i<<" "<<f<<" "<<(p1-p2).norm()<<" "<<dist*fromBelow<<std::endl;
-                CollisionConstraint constraint;
-                constraint.qIdx = i;
-                constraint.f = faces.row(f);
-
-                collisionConstraintsList.push_back(constraint);
-              }
-            }
-        }
-    }
+//    for (int i = 0; i < p.rows(); ++i)
+//    {
+//        // Iterate through all triangles
+//        for (int f = 0; f < faces.rows(); f++)
+//        {
+//            int t1 = faces(f, 0), t2 = faces(f, 1), t3 = faces(f, 2);
+//            if(t1==i || t2==i || t3==i)
+//              continue;
+//            TV q = p.row(i);
+//            TV p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
+//
+//              if(pointIntersectsTriangle(q,p1,p2,p3)){
+////                  std::cout<<i<<" "<<f<<" "<<(p1-p2).norm()<<" "<<dist*fromBelow<<std::endl;
+//                CollisionConstraint constraint;
+//                constraint.qIdx = i;
+//                constraint.f = faces.row(f);
+//                collisionConstraintsList.push_back(constraint);
+//              }
+//        }
+//    }
 }
 
 void PBD::collisionConstraints()

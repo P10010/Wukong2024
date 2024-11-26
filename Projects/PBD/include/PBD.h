@@ -103,6 +103,15 @@ public:
     bool collisionConstraintsActivated = true;
     bool positionConstraintsActivated = true;
 
+private:
+    int prime1=73856093, prime2=19349663, prime3=83492791;
+    int hash(int i, int j, int k, int n);
+    int hash(PBD::TV p, T l, int n, TV& minCoord);
+    bool pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3) const;
+
+    void hashVertices(std::vector<std::vector<int>>& hashTable, T boxSize, TV& minCoord);
+
+    void spatialHashing();
 public:
     void initializeFromFile(const std::string& filename);
 
@@ -111,6 +120,9 @@ public:
     void bendingConstraints(int solver_it);
 
     void generateCollisionConstraints();
+
+
+
 
     void collisionConstraints();
 
