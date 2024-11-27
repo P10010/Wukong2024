@@ -38,10 +38,6 @@ public:
         int qIdx; // vertex
 
         IV f; // face
-
-        T d; // penetration depth
-
-        TV gradq, gradp1, gradp2, gradp3; //gradients of collision constraint
     };
 
 public:
@@ -64,6 +60,9 @@ public:
     // vector with 1/mass of each vertex, (V x 1)
     VectorXT w;
 
+    // vector with mass of each vertex, (V x 1)
+    VectorXT m;
+
     // time step
     T dt = 0.01;
 
@@ -76,6 +75,9 @@ public:
     // stiffness parameters
     T k_stretch = 0.5;
     T k_bend = 0.25;
+
+    //damping parameter
+    T k_damping=0.1;
 
     // gravitational acceleration, (3 x 1)
     TV g = {0.0, 0.0, -9.81};
@@ -101,6 +103,15 @@ public:
     bool collisionConstraintsActivated = true;
     bool positionConstraintsActivated = true;
 
+private:
+    int prime1=73856093, prime2=19349663, prime3=83492791;
+    int hash(int i, int j, int k, int n);
+    int hash(PBD::TV p, T l, int n, TV& minCoord);
+    bool pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3) const;
+
+    void hashVertices(std::vector<std::vector<int>>& hashTable, T boxSize, TV& minCoord);
+
+    void spatialHashing();
 public:
     void initializeFromFile(const std::string& filename);
 
@@ -110,17 +121,23 @@ public:
 
     void generateCollisionConstraints();
 
+
+
+
     void collisionConstraints();
 
     void positionConstraints();
 
     void projectConstraints(int solver_it);
 
+    void dampVelocities(T kDamping);
+
     bool advanceOneStep(int step);
 
 public:
     PBD() {}
     ~PBD() {}
+
 };
 
 #endif
