@@ -82,10 +82,15 @@ public:
         const double max_rho = 10.0;
         ImGui::SliderScalar("Density", ImGuiDataType_Double, &simulation.rho, &min_rho, &max_rho, "%.2f");
 
+        // Change thickness h
+        const double min_h = 0.0001;
+        const double max_h = 0.01;
+        ImGui::SliderScalar("Thickness", ImGuiDataType_Double, &simulation.h, &min_h, &max_h, "%.5f");
+
         // Change number of iterations
         const size_t min_iter = 0;
         const size_t max_iter = 100;
-        ImGui::SliderScalar("Collision iterations", ImGuiDataType_U64, &simulation.numIterations, &min_iter, &max_iter, "%d");
+        ImGui::SliderScalar("Solver iterations", ImGuiDataType_U64, &simulation.numIterations, &min_iter, &max_iter, "%d");
 
         // Change time step
         const double dt_step=0.001,dt_stepfast=0.01;
@@ -97,10 +102,12 @@ public:
         ImGui::SliderScalar("Steps", ImGuiDataType_U64, &simulation.nSteps, &min_steps, &max_steps, "%d");
 
         // Activate/Deactivate constraints
+        ImGui::Checkbox("Position Constraints", &simulation.positionConstraintsActivated);
         ImGui::Checkbox("Stretching Constraints", &simulation.stretchingConstraintsActivated);
         ImGui::Checkbox("Bending Constraints", &simulation.bendingConstraintsActivated);
         ImGui::Checkbox("Collision Constraints", &simulation.collisionConstraintsActivated);
-        ImGui::Checkbox("Position Constraints", &simulation.positionConstraintsActivated);
+        ImGui::Checkbox("Spatial Hashing", &simulation.useSpatialHashing);
+        ImGui::Checkbox("Floor Collision", &simulation.floorCollision);
 
         if (!animate_modes && run_sim)
         {

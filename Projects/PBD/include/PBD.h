@@ -70,7 +70,7 @@ public:
     T rho = 1.0;
 
     // cloth thickness [m]
-    T h = 0.01;
+    T h = 0.001;
 
     // stiffness parameters
     T k_stretch = 0.5;
@@ -86,7 +86,7 @@ public:
     size_t numIterations = 10;
 
     // number of steps (outer loop)
-    size_t nSteps=1000;
+    size_t nSteps=10000;
 
     // collision constraints
     std::vector<CollisionConstraint> collisionConstraintsList;
@@ -102,6 +102,8 @@ public:
     bool bendingConstraintsActivated = true;
     bool collisionConstraintsActivated = true;
     bool positionConstraintsActivated = true;
+    bool useSpatialHashing = true;
+    bool floorCollision = true;
 
 private:
     int prime1=73856093, prime2=19349663, prime3=83492791;
