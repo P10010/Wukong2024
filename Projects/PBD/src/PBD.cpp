@@ -40,12 +40,26 @@ void PBD::initializeFromFile(const std::string& filename)
     p.resize(nRows, 3);
     m.resize(nRows);
     w.resize(nRows);
-    // TODO: put 1/mass, at the moment I set the mass to be 1 for every vertex
-    // for every vertex i, it should be 1/3 of the mass of each adjacent
-    // triangle
+
+    // Calculate mass for each vertex based on adjacent triangles
     for (int i = 0; i < nRows; i++)
     {
-        m(i) = 0.1;
+        m(i) = 0;
+    }
+    for (int i = 0; i < faces.rows(); i++)
+    {
+        int v1 = faces(i, 0);
+        int v2 = faces(i, 1);
+        int v3 = faces(i, 2);
+        TV a = atRest.row(v2) - atRest.row(v1);
+        TV b = atRest.row(v3) - atRest.row(v1);
+        T area = a.cross(b).norm() * 0.5;
+        m(v1) += area / 3.0;
+        m(v2) += area / 3.0;
+        m(v3) += area / 3.0;
+    }
+    for (int i = 0; i < nRows; i++)
+    {
         w(i) = 1 / m(i);
     }
 
