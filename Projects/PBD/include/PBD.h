@@ -38,6 +38,8 @@ public:
         int qIdx; // vertex
 
         IV f; // face
+
+        TV n = {0, 0, 0}; // normal
     };
 
 public:
@@ -71,6 +73,9 @@ public:
 
     // cloth thickness [m]
     T h = 0.001;
+
+    // friction coefficient
+    T mu = 0.5;
 
     // stiffness parameters
     T k_stretch = 0.5;
@@ -123,10 +128,9 @@ public:
 
     void generateCollisionConstraints();
 
-
-
-
     void collisionConstraints();
+
+    void applyFriction();
 
     void positionConstraints();
 

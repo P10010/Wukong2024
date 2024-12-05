@@ -402,7 +402,7 @@ void PBD::generateCollisionConstraints()
 
 void PBD::collisionConstraints()
 {
-    for (const auto& constraint : collisionConstraintsList)
+    for (auto& constraint : collisionConstraintsList)
     {
         int t1 = constraint.f(0), t2 = constraint.f(1), t3 = constraint.f(2);
 
@@ -426,9 +426,7 @@ void PBD::collisionConstraints()
         // check if vertex is from below with respect to the triangle normal (it
         // should be correct)
         if (dist < 0)
-        {
             fromBelow = -1;
-        }
         else
             fromBelow = 1;
 
@@ -511,8 +509,31 @@ void PBD::collisionConstraints()
             p.row(t2) += dp * w_p2 * gradp2;
             p.row(t3) += dp * w_p3 * gradp3;
 
+            constraint.n = n * fromBelow;
+
             //        std::cout<<constraint.d<<" "<<std::abs(dist)-h<<std::endl;
         }
+    }
+}
+
+
+
+void PBD::applyFriction()
+{
+    for (auto& constraint : collisionConstraintsList)
+    {
+        if (constraint.n == TV(0, 0, 0))
+            continue;
+        
+        TV vRelative = v.row(constraint.qIdx);   // Current velocity
+        TV vNormal = vRelative.dot(constraint.n) * constraint.n; // Component along the normal
+        TV vTangential = vRelative - vNormal; // Component perpendicular to the normal
+
+        // Apply friction: scale tangential component
+        TV vTangentialFriction = (1.0 - mu) * vTangential;
+
+        // Update velocity
+        v.row(constraint.qIdx) = vTangentialFriction + vNormal;
     }
 }
 
@@ -621,6 +642,7 @@ bool PBD::advanceOneStep(int step)
     }
 
     // TODO: velocity update
+    applyFriction();
 
     if (step == nSteps)
         return true;
