@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <tbb/tbb.h>
 #include <unordered_map>
 #include <utility>
@@ -65,6 +66,15 @@ public:
     // vector with mass of each vertex, (V x 1)
     VectorXT m;
 
+    // vector with Lagrange multipliers, (C x 1)
+    VectorXT lambdas;
+
+    // map containing constraint name -> constraint idx
+    std::unordered_map<std::string, int> constraint_idx = {
+        std::make_pair("stretch", 0),
+        std::make_pair("bend", 1)
+    };
+
     // time step
     T dt = 0.01;
 
@@ -78,8 +88,8 @@ public:
     T mu = 0.5;
 
     // stiffness parameters
-    T k_stretch = 0.5;
-    T k_bend = 0.25;
+    T alpha_stretch = 0.5;
+    T alpha_bend = 0.25;
 
     //damping parameter
     T k_damping=0.1;
@@ -111,6 +121,13 @@ public:
     bool floorCollision = true;
 
 private:
+    int seed = 43854397;
+    std::mt19937 gen = std::mt19937(seed);
+    std::uniform_int_distribution<int> dist10;
+    std::uniform_int_distribution<int> distV;
+    std::uniform_int_distribution<int> distF;
+
+
     int prime1=73856093, prime2=19349663, prime3=83492791;
     int hash(int i, int j, int k, int n);
     int hash(PBD::TV p, T l, int n, TV& minCoord);
@@ -122,9 +139,9 @@ private:
 public:
     void initializeFromFile(const std::string& filename);
 
-    void stretchingConstraints(int solver_it);
+    void stretchingConstraints();
 
-    void bendingConstraints(int solver_it);
+    void bendingConstraints();
 
     void generateCollisionConstraints();
 
@@ -134,9 +151,11 @@ public:
 
     void positionConstraints();
 
-    void projectConstraints(int solver_it);
+    void projectConstraints();
 
     void dampVelocities(T kDamping);
+
+    void applyFakeWind();
 
     bool advanceOneStep(int step);
 
