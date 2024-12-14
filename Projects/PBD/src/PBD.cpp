@@ -100,6 +100,22 @@ void PBD::initializeFromFile(const std::string& filename)
     posConstraintsV << -0.3, 0.0, 0.0, 0.0, 0.3, 0.0;
     w(9) = 0;
     w(90) = 0;
+
+    incidentFaces.resize(edges.rows());
+  for (int e = 0; e < edges.rows(); e++)
+    for(int f=0; f< faces.rows();f++){
+      int cnt=0;
+      for(int i=0;i<2;i++)
+        for(int j=0;j<3;j++)
+          cnt+=edges(e,i)==faces(f,j);
+      if(cnt==2)
+        incidentFaces[e].push_back(f);
+    }
+  adjList.reserve(atRest.rows());
+  for (int e = 0; e < edges.rows(); e++) {
+    adjList[edges(e, 0)].push_back(edges(e,1));
+    adjList[edges(e, 1)].push_back(edges(e,0));
+  }
     //    std::cout<<nRows<<" "<<p.row(nRows/2)<<" "<<p.row(nRows-1)<<"\n";
 
     // pinned horizontal
@@ -286,6 +302,48 @@ bool PBD::pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1,
             w3 <= 1 + delta); // collision detected
 }
 
+// check if edge x1x2 is close to x3x4 (from
+// Robust Treatment of Collisions, Contact and Friction for Cloth Animation)
+bool PBD::edgesAreClose(const PBD::TV& x1, const PBD::TV& x2, const PBD::TV& x3, const PBD::TV& x4) const{
+
+  TV x21=x2-x1, x43=x4-x3;
+
+  //parallel edges
+  if(x21.cross(x43).norm()<epsilon) {
+    //currently I only check the distance between the two lines, I should project the points to do a proper calculation
+
+    //horizontal lines
+    if(x21.x()<epsilon)
+      return abs(x2.x()-x4.x())<h;
+
+    float m=x21.y()/x21.x();
+    float q1=x2.y()-m*x2.x();
+    float q2=x4.y()-m*x4.x();
+
+    return abs(q1-q2)/sqrt(m*m+1)<h;
+  }
+
+  //Find the closest points on the infinite lines
+  TV x31=x3-x1;
+  TM2 A;
+  A << x21.dot(x21), -x21.dot(x43), -x21.dot(x43), x43.dot(x43);
+  TV2 b = {x21.dot(x31), -x43.dot(x31)};
+
+  TV2 w12 = A.colPivHouseholderQr().solve(b);
+
+  if(w12.x()>1)
+    w12.x()=1;
+  if(w12.y()>1)
+    w12.y()=1;
+  if(w12.x()<0)
+    w12.x()=0;
+  if(w12.y()<0)
+    w12.y()=0;
+  TV point1=x1+w12.x()*x21, point2=x3+w12.y()*x43;
+
+  return (point1-point2).norm()<h;
+}
+
 int PBD::hash(int i, int j, int k, int n)
 {
     return (((long)i * prime1) ^ ((long)j * prime2) ^ ((long)k * prime3)) % n;
@@ -364,6 +422,54 @@ void PBD::spatialHashing()
                         }
                 }
     }
+
+// wrong implementation of edge-edge collisions
+//  for (int e = 0; e < edges.rows(); e++)
+//  {
+//    int a, b;
+//    a = edges(e, 0);
+//    b = edges(e, 1);
+//    VMD::Matrix<T, 3, 2> edgeVertices;
+//    TV p1=p.row(a), p2=p.row(b);
+//    edgeVertices << p1,p2;
+//    std::array<int, 3> minBox, maxBox;
+//    // std::cout << "p1\n" << p1 << std::endl;
+//    // std::cout << "triangle vertices\n"
+//    //           << triangleVertices << std::endl;
+//    for (int i = 0; i < 3; i++)
+//    {
+//      TV2 tmp = edgeVertices.row(i);
+//      minBox[i] = (int)std::floor(
+//              (tmp.minCoeff() - minCoord(i)) / boxSize);
+//      // std::max(0,(int)std::floor((triangleVertices.row(i).minCoeff()-minCoord(i))/boxSize)-1);
+//      maxBox[i] = (int)std::floor(
+//              (tmp.maxCoeff() - minCoord(i)) / boxSize);
+//    }
+////     std::cout << "minBox\n" << minBox[0] << " " << minBox[1] << " "
+////               << minBox[2] << std::endl;
+////     std::cout << "maxBox\n" << maxBox[0] << " " << maxBox[1] << " "
+////                 << maxBox[2] << std::endl;
+//
+//    for (int i = minBox[0]; i <= maxBox[0]; i++)
+//      for (int j = minBox[1]; j <= maxBox[1]; j++)
+//        for (int k = minBox[2]; k <= maxBox[2]; k++)
+//        {
+//          int hashVal = hash(i, j, k, n);
+//          for (int qIdx : hashTable[hashVal])
+//            for(int endPoint : adjList[qIdx])
+//              if (qIdx != a && qIdx != b && endPoint!=a && endPoint!=b &&
+//                  edgesAreClose(p.row(qIdx), p.row(endPoint), p1, p2))
+//              {
+//                CollisionConstraint constraint;
+//                constraint.qIdx = qIdx;
+//                constraint.f = faces.row(incidentFaces[e][0]);
+//                collisionConstraintsList.push_back(constraint);
+//
+////                constraint.qIdx = endPoint;
+////                collisionConstraintsList.push_back(constraint);
+//              }
+//        }
+//  }
 }
 void PBD::generateCollisionConstraints()
 {

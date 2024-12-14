@@ -112,9 +112,14 @@ public:
 
 private:
     int prime1=73856093, prime2=19349663, prime3=83492791;
+    float epsilon=0.001f;
+    std::vector<std::vector<int>> incidentFaces;
+    std::vector<std::vector<int>> adjList;
     int hash(int i, int j, int k, int n);
     int hash(PBD::TV p, T l, int n, TV& minCoord);
     bool pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3) const;
+
+    bool edgesAreClose(const PBD::TV& x1, const PBD::TV& x2, const PBD::TV& x3, const PBD::TV& x4) const;
 
     void hashVertices(std::vector<std::vector<int>>& hashTable, T boxSize, TV& minCoord);
 
