@@ -39,8 +39,8 @@ public:
         polyscope::view::frontDir = polyscope::FrontDir::YFront;
         polyscope::view::windowWidth = 3000;
         polyscope::view::windowHeight = 2000;
-        polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
-        polyscope::options::groundPlaneHeightFactor = 0.6;
+        polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::ShadowOnly;
+        polyscope::options::groundPlaneHeightFactor = 0.01;
         polyscope::options::shadowDarkness = 0.4;
         polyscope::view::bgColor = {114. / 255., 198. / 255., 243. / 255., 0.};
         polyscope::options::transparencyMode = polyscope::TransparencyMode::Pretty;
