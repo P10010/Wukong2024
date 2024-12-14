@@ -1,0 +1,11 @@
+Model Information:
+* title:	Starfish Weekly
+* source:	https://sketchfab.com/3d-models/starfish-weekly-4ba8ffed931a471da9c8dd2893eefbe6
+* author:	vaporclaws (https://sketchfab.com/vaporclaws)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Starfish Weekly" (https://sketchfab.com/3d-models/starfish-weekly-4ba8ffed931a471da9c8dd2893eefbe6) by vaporclaws (https://sketchfab.com/vaporclaws) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

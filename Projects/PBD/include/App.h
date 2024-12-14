@@ -29,9 +29,6 @@ public:
     Eigen::MatrixXd meshV;
     Eigen::MatrixXi meshF;
 
-    Eigen::MatrixXd boatV;
-    Eigen::MatrixXi boatF;
-
 public:
     void initializeScene()
     {
@@ -46,6 +43,7 @@ public:
         polyscope::options::groundPlaneHeightFactor = 0.6;
         polyscope::options::shadowDarkness = 0.4;
         polyscope::view::bgColor = {114. / 255., 198. / 255., 243. / 255., 0.};
+        polyscope::options::transparencyMode = polyscope::TransparencyMode::Pretty;
         // Initialize polyscope
         polyscope::init();
         meshV = simulation.currentV;
@@ -64,26 +62,60 @@ public:
         boatMesh->setSurfaceColor(glm::vec3(161. / 255., 77. / 255., 34. / 255.));
         boatMesh->setEdgeWidth(0.0);
         
-        // TODO: change place?
         Eigen::MatrixXd waterV;
         Eigen::MatrixXi waterF;
-        igl::readOBJ("../../../Projects/PBD/data/environment/water.obj", waterV, waterF);
+        igl::readOBJ("../../../Projects/PBD/data/environment/water/water.obj", waterV, waterF);
         polyscope::SurfaceMesh* waterMesh = polyscope::registerSurfaceMesh("water", waterV, waterF);
-        waterMesh->setSmoothShade(false);
+        waterMesh->setSmoothShade(true);
         waterMesh->setTransparency(0.5);
-        // waterMesh->setMaterial("clay");
+        waterMesh->setMaterial("wax");
         waterMesh->setSurfaceColor(glm::vec3(15. / 255., 72. / 255., 110. / 255.));
         waterMesh->setEdgeWidth(0.0);
 
-        // TODO: change place?
         Eigen::MatrixXd sandV;
         Eigen::MatrixXi sandF;
         igl::readOBJ("../../../Projects/PBD/data/environment/sand/sand.obj", sandV, sandF);
         polyscope::SurfaceMesh* sandMesh = polyscope::registerSurfaceMesh("sand", sandV, sandF);
-        sandMesh->setSmoothShade(false);
-        sandMesh->setMaterial("clay");
+        sandMesh->setSmoothShade(true);
+        sandMesh->setMaterial("wax");
         sandMesh->setSurfaceColor(glm::vec3(253. / 255., 217. / 255., 141. / 255.));
         sandMesh->setEdgeWidth(0.0);
+
+        Eigen::MatrixXd starfishV;
+        Eigen::MatrixXi starfishF;
+        igl::readOBJ("../../../Projects/PBD/data/environment/starfish/starfish.obj", starfishV, starfishF);
+        polyscope::SurfaceMesh* starfishMesh = polyscope::registerSurfaceMesh("starfish", starfishV, starfishF);
+        starfishMesh->setSmoothShade(true);
+        starfishMesh->setMaterial("wax");
+        starfishMesh->setSurfaceColor(glm::vec3(232. / 255., 124. / 255., 255. / 255.));
+        starfishMesh->setEdgeWidth(0.0);
+
+        Eigen::MatrixXd seaweedV;
+        Eigen::MatrixXi seaweedF;
+        igl::readOBJ("../../../Projects/PBD/data/environment/seaweed/seaweed_all.obj", seaweedV, seaweedF);
+        polyscope::SurfaceMesh* seaweedMesh = polyscope::registerSurfaceMesh("seaweed", seaweedV, seaweedF);
+        seaweedMesh->setSmoothShade(true);
+        seaweedMesh->setMaterial("wax");
+        seaweedMesh->setSurfaceColor(glm::vec3(46. / 255., 145. / 255., 31. / 255.));
+        seaweedMesh->setEdgeWidth(0.0);
+
+        Eigen::MatrixXd fishesV;
+        Eigen::MatrixXi fishesF;
+        igl::readOBJ("../../../Projects/PBD/data/environment/fishes/fishes_all.obj", fishesV, fishesF);
+        polyscope::SurfaceMesh* fishesMesh = polyscope::registerSurfaceMesh("fishes", fishesV, fishesF);
+        fishesMesh->setSmoothShade(true);
+        fishesMesh->setMaterial("wax");
+        fishesMesh->setSurfaceColor(glm::vec3(42. / 255., 135. / 255., 188. / 255.));
+        fishesMesh->setEdgeWidth(0.0);
+
+        Eigen::MatrixXd seashellV;
+        Eigen::MatrixXi seashellF;
+        igl::readOBJ("../../../Projects/PBD/data/environment/seashell/seashell_all.obj", seashellV, seashellF);
+        polyscope::SurfaceMesh* seashellMesh = polyscope::registerSurfaceMesh("seashells", seashellV, seashellF);
+        seashellMesh->setSmoothShade(true);
+        seashellMesh->setMaterial("wax");
+        seashellMesh->setSurfaceColor(glm::vec3(236. / 255., 226. / 255., 204. / 255.));
+        seashellMesh->setEdgeWidth(0.0);
 
         glm::vec3 camPos = {-10.2436, 14.852, 5.19575};
         glm::vec3 camLookDir = {.481319, -0.8376, -0.258376};
@@ -91,6 +123,7 @@ public:
 
         polyscope::state::userCallback = [&]() { sceneCallback(); };
     }
+
     void sceneCallback()
     {
         if (ImGui::Button("Toggle Simulation"))
