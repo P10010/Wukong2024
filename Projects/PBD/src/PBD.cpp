@@ -107,6 +107,29 @@ void PBD::initializeFromFile(const std::string& filename)
     }
 
     v = MatrixXT::Zero(nRows, 3);
+//    Pinned to diagonal and initialization for incorrect edge collisions
+//    posConstraintsIdxs.resize(2);
+//    posConstraintsIdxs << 9, 90;
+//    posConstraintsV.resize(2, 3);
+//    posConstraintsV << -0.3, 0.0, 0.0, 0.0, 0.3, 0.0;
+//    w(9) = 0;
+//    w(90) = 0;
+//
+//    incidentFaces.resize(edges.rows());
+//    for (int e = 0; e < edges.rows(); e++)
+//        for(int f=0; f< faces.rows();f++){
+//            int cnt=0;
+//            for(int i=0;i<2;i++)
+//                for(int j=0;j<3;j++)
+//                    cnt+=edges(e,i)==faces(f,j);
+//            if(cnt==2)
+//                incidentFaces[e].push_back(f);
+//        }
+//    adjList.reserve(atRest.rows());
+//    for (int e = 0; e < edges.rows(); e++) {
+//        adjList[edges(e, 0)].push_back(edges(e,1));
+//        adjList[edges(e, 1)].push_back(edges(e,0));
+//    }
 
     // pinned to mast (sail)
     posConstraintsIdxs = -1 * VectorXi::Ones(6);
