@@ -1,6 +1,7 @@
 #ifndef APP_H
 #define APP_H
 
+#include "Util.h"
 #include "igl/readOBJ.h"
 #include "polyscope/polyscope.h"
 #include "polyscope/surface_mesh.h"
