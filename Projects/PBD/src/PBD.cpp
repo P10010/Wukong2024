@@ -107,82 +107,24 @@ void PBD::initializeFromFile(const std::string& filename)
     }
 
     v = MatrixXT::Zero(nRows, 3);
-    // pinned diagonal (small grid)
-    // posConstraintsIdxs.resize(2);
-    // posConstraintsIdxs << 9, 90;
-    // posConstraintsV.resize(2, 3);
-    // posConstraintsV << -0.3, 0.0, 0.0, 0.0, 0.3, 0.0;
-    // w(9) = 0;
-    // w(90) = 0;
-
-    // pinned diagonal (large grid)
-    // posConstraintsIdxs.resize(2);
-    // posConstraintsIdxs << 0, 3;
-    // posConstraintsV.resize(2, 3);
-    // posConstraintsV << -0.331, 0.0, 0.0, 0.0, 0.331, 0.0;
-    // w(0) = 0;
-    // w(3) = 0;
 
     // pinned to mast (sail)
-    posConstraintsIdxs = -1 * VectorXi::Ones(24);
-    posConstraintsV.resize(24, 3);
+    posConstraintsIdxs = -1 * VectorXi::Ones(6);
+    posConstraintsV.resize(6, 3);
     posConstraintsIdxs[0] = 1;
-    posConstraintsIdxs[21] = 3;
-    posConstraintsIdxs[22] = 0;
-    posConstraintsIdxs[23] = 2;
+    //
+    posConstraintsIdxs[1] = 50;
+    posConstraintsIdxs[2] = 57;
+    //
+    posConstraintsIdxs[3] = 3;
+    posConstraintsIdxs[4] = 0;
+    posConstraintsIdxs[5] = 2;
     for (int i = 0; i < posConstraintsIdxs.rows(); ++i)
     {
         int idx = posConstraintsIdxs[i];
-        if (idx < 0) { 
-            posConstraintsIdxs[i] = 43 + i;
-            idx = posConstraintsIdxs[i];
-        }
-        // posConstraintsV.row(i) << -0.2, -3.08 + i * 0.3, 4.5;
         posConstraintsV.row(i) = atRest.row(idx);
         w(idx) = 0;
     }
-    // posConstraintsV.row(22) << -0.11, -3.08, 1.3; // vertex 0
-    // posConstraintsV.row(23) << -0.11, 3.1, 1.3;   // vertex 2
-    posConstraintsV.row(22) = atRest.row(posConstraintsIdxs[22]); // vertex 0
-    posConstraintsV.row(23) = atRest.row(posConstraintsIdxs[23]); // vertex 2
-
-    // pinned horizontal
-    //     posConstraintsIdxs.resize(2);
-    //     posConstraintsIdxs << 0, 90;
-    //     posConstraintsV.resize(2, 3);
-    //     posConstraintsV << 0.0, 0.0, 0.0, 0.0, 0.3, 0.0;
-    //     w(0)=0;
-    //     w(90)=0;
-
-    // pinned horizontally in the middle
-    //  int m=ceil(std::sqrt(nRows));
-    //  int x=m/2;
-    //  int y=m/2+(3)*m;
-    ////  std::cout<<x<<" "<<y<<" "<<atRest.row(x)<<" "<<atRest.row(y)<<"\n";
-    //  posConstraintsIdxs.resize(2);
-    //  posConstraintsIdxs <<x,y;
-    //  posConstraintsV.resize(2, 3);
-    //  posConstraintsV << atRest.row(x), atRest.row(y);
-    //  w(x)=0;
-    //  w(y)=0;
-
-    // more flexible way of introducing constraints... The current configuration
-    // exhibits well the effect of collision constraints since without them the
-    // cloth folds on itself and self intersects
-    //     int m=ceil(std::sqrt(nRows));
-    //     int x=m/2+m*2;
-
-    //     int nPosConstr=1;
-    // //    std::cout<<x+m*(nPosConstr-1)*2<<" "<<nRows<<"\n";
-    //     posConstraintsIdxs.resize(nPosConstr);
-    //     posConstraintsV.resize(nPosConstr, 3);
-    //     for(int i=0;i<nPosConstr;i++) {
-    //         int y=x+m*i*2;
-    //         posConstraintsIdxs(i)=y;
-    //         posConstraintsV.row(i)=atRest.row(y);
-    // //        std::cout<<x<<" "<<y<<" "<<atRest.row(y)<<"\n";
-    //         w(y)=0;
-    //     }
 
     lambdas = VectorXT::Zero(constraint_idx.size());
 
@@ -191,7 +133,7 @@ void PBD::initializeFromFile(const std::string& filename)
     distF = std::uniform_int_distribution<int>(0, F.rows() - 1);
 }
 
-void PBD::stretchingConstraints()
+void PBD::stretchingConstraintsXPBD()
 {
     for (int i = 0; i < edges.rows(); i++)
     {
@@ -214,26 +156,26 @@ void PBD::stretchingConstraints()
         // T dlambda = -((p1 - p2).norm() - l0 + alpha * lambda) / (w_sum + alpha);
         T dlambda = -((p1 - p2).norm() - l0) / (w_sum + alpha);
 
-        if (dlambda > 1.0) {
-            std::cout << "===================" << std::endl;
-            std::cout << w_sum << std::endl;
-            std::cout << alpha << std::endl;
-            std::cout << lambda << std::endl;
-        }
+        // if (dlambda > 1.0) {
+        //     std::cout << "===================" << std::endl;
+        //     std::cout << w_sum << std::endl;
+        //     std::cout << alpha << std::endl;
+        //     std::cout << lambda << std::endl;
+        // }
 
         TV dp1 = w(a) * dlambda * (p1 - p2).normalized();
         TV dp2 = w(b) * dlambda * (p2 - p1).normalized();
 
-        if (dp1.norm() > 1.0 or dp2.norm() > 1.0) {
-            std::cout << "--------------------" << std::endl;
-            std::cout << "a: " << a << std::endl;
-            std::cout << "|dp1(a)|: " << dp1.norm() << std::endl;
-            std::cout << "b: " << b << std::endl;
-            std::cout << "|dp2(b)|: " << dp2.norm() << std::endl;
-            std::cout << "w_sum: " << w_sum << std::endl;
-            std::cout << "alpha: " << alpha << std::endl;
-            std::cout << "lambda: " << lambda << std::endl;
-        }
+        // if (dp1.norm() > 1.0 or dp2.norm() > 1.0) {
+        //     std::cout << "--------------------" << std::endl;
+        //     std::cout << "a: " << a << std::endl;
+        //     std::cout << "|dp1(a)|: " << dp1.norm() << std::endl;
+        //     std::cout << "b: " << b << std::endl;
+        //     std::cout << "|dp2(b)|: " << dp2.norm() << std::endl;
+        //     std::cout << "w_sum: " << w_sum << std::endl;
+        //     std::cout << "alpha: " << alpha << std::endl;
+        //     std::cout << "lambda: " << lambda << std::endl;
+        // }
 
         p.row(a) += dp1;
         p.row(b) += dp2;
@@ -242,7 +184,31 @@ void PBD::stretchingConstraints()
     }
 }
 
-void PBD::bendingConstraints()
+void PBD::stretchingConstraints(int solver_it)
+{
+    for (int i = 0; i < edges.rows(); i++)
+    {
+        int a, b;
+        a = edges(i, 0);
+        b = edges(i, 1);
+        T l0 = edge_lengths(i);
+
+        TV p1, p2;
+        p1 = p.row(a);
+        p2 = p.row(b);
+
+        TV dp1 = -w(a) / (w(a) + w(b)) * ((p1 - p2).norm() - l0) *
+                 (p1 - p2).normalized();
+        TV dp2 = w(b) / (w(a) + w(b)) * ((p1 - p2).norm() - l0) *
+                 (p1 - p2).normalized();
+
+        T alpha = 1. - std::pow(1. - k_stretch, 1. / solver_it);
+        p.row(a) += dp1 * alpha;
+        p.row(b) += dp2 * alpha;
+    }
+}
+
+void PBD::bendingConstraintsXPBD()
 {
     for (int f = 0; f < faces.rows(); f++)
     {
@@ -317,6 +283,83 @@ void PBD::bendingConstraints()
             p.row(p4i) += dp4;
 
             lambdas[constraint_idx["bend"]] += dlambda;
+        }
+    }
+}
+
+void PBD::bendingConstraints(int solver_it)
+{
+    for (int f = 0; f < faces.rows(); f++)
+    {
+        for (int e = 0; e < 3; e++)
+        {
+            int fp = TT(f, e); // adjacent face to fp opposite to edge e
+            // skip adjacent face if we have already processed it (or if -1)
+            if (fp < f)
+                continue;
+
+            int p1i, p2i, p3i, p4i;
+            p1i = faces(f, (e + 2) % 3);
+            p2i = faces(f, (e + 0) % 3);
+            p3i = faces(f, (e + 1) % 3);
+            for (int j = 0; j < 3; j++)
+            {
+                if (faces(fp, j) != p1i && faces(fp, j) != p2i &&
+                    faces(fp, j) != p3i)
+                {
+                    p4i = faces(fp, j);
+                    break;
+                }
+            }
+
+            TV p1, p2, p3, p4;
+            p1 = p.row(p1i);
+            p2 = p.row(p2i);
+            p3 = p.row(p3i);
+            p4 = p.row(p4i);
+            // substract p1 to make calculations easier
+            p2 -= p1;
+            p3 -= p1;
+            p4 -= p1;
+
+            TV n1, n2;
+            n1 = p2.cross(p3).normalized();
+            n2 = p2.cross(p4).normalized();
+
+            T d = std::min(1.0, n1.dot(n2));
+
+            TV q1, q2, q3, q4;
+            q3 = (p2.cross(n2) + n1.cross(p2) * d) / p2.cross(p3).norm();
+            q4 = (p2.cross(n1) + n2.cross(p2) * d) / p2.cross(p4).norm();
+            q2 = -(p3.cross(n2) + n1.cross(p3) * d) / p2.cross(p3).norm() -
+                 (p4.cross(n1) + n2.cross(p4) * d) / p2.cross(p4).norm();
+            q1 = -q2 - q3 - q4;
+
+            T sum_qnorm2 = q1.squaredNorm() + q2.squaredNorm() +
+                           q3.squaredNorm() + q4.squaredNorm();
+            if (sum_qnorm2 == 0)
+                continue;
+            T sum_w = w(p1i) + w(p2i) + w(p3i) + w(p4i);
+            T sqrt_1md2 = std::sqrt(1.0 - d * d);
+            T acosd = std::acos(d);
+            T phi0 = dihedral_angles(f, e);
+
+            T alpha = 1. - std::pow(1. - k_bend, 1. / solver_it);
+
+            TV dp1, dp2, dp3, dp4;
+            dp1 = -4 * w(p1i) / sum_w * sqrt_1md2 * (acosd - phi0) /
+                  sum_qnorm2 * q1;
+            dp2 = -4 * w(p2i) / sum_w * sqrt_1md2 * (acosd - phi0) /
+                  sum_qnorm2 * q2;
+            dp3 = -4 * w(p3i) / sum_w * sqrt_1md2 * (acosd - phi0) /
+                  sum_qnorm2 * q3;
+            dp4 = -4 * w(p4i) / sum_w * sqrt_1md2 * (acosd - phi0) /
+                  sum_qnorm2 * q4;
+
+            p.row(p1i) += dp1 * alpha;
+            p.row(p2i) += dp2 * alpha;
+            p.row(p3i) += dp3 * alpha;
+            p.row(p4i) += dp4 * alpha;
         }
     }
 }
@@ -633,13 +676,20 @@ void PBD::positionConstraints()
     }
 }
 
-void PBD::projectConstraints()
+void PBD::projectConstraints(int solver_it)
 {
     if (stretchingConstraintsActivated)
-        PBD::stretchingConstraints();
+        if (useXPBD)
+            PBD::stretchingConstraintsXPBD();
+        else
+            PBD::stretchingConstraints(solver_it);
+
 
     if (bendingConstraintsActivated)
-        PBD::bendingConstraints();
+        if (useXPBD)
+            PBD::bendingConstraintsXPBD();
+        else
+            PBD::bendingConstraints(solver_it);
 
     if (collisionConstraintsActivated)
         PBD::collisionConstraints();
@@ -706,8 +756,11 @@ bool PBD::advanceOneStep(int step)
     {
         v.row(i) += dt * g;
 
-        int wind = dist10(gen);
-        if (wind == 10) applyFakeWind();
+        if (fakeWindActivated)
+        {
+            int wind = dist10(gen);
+            if (wind == 10) applyFakeWind();
+        }
     }
 
     dampVelocities(k_damping);
@@ -718,6 +771,7 @@ bool PBD::advanceOneStep(int step)
         p.row(i) = currentV.row(i) + dt * v.row(i);
     }
 
+    // for XPBD
     lambdas.setZero(constraint_idx.size());
 
     // generate collision constraints
@@ -727,7 +781,7 @@ bool PBD::advanceOneStep(int step)
     // Solve constraints
     for (int it = 0; it < numIterations; it++)
     {
-        projectConstraints();
+        projectConstraints(it);
     }
 
     // Post-solve: update velocities

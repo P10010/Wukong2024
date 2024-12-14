@@ -5,9 +5,6 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <random>
 #include <tbb/tbb.h>
 #include <unordered_map>
@@ -88,17 +85,21 @@ public:
     T mu = 0.5;
 
     // stiffness parameters
-    T alpha_stretch = 0.5;
-    T alpha_bend = 0.25;
+    T k_stretch = 0.5;
+    T k_bend = 0.25;
+
+    // compliance parameters
+    T alpha_stretch = 0.075;
+    T alpha_bend = 4.0;
 
     //damping parameter
-    T k_damping=0.1;
+    T k_damping = 0.01;
 
     // gravitational acceleration, (3 x 1)
     TV g = {0.0, 0.0, -9.81};
 
     // number of iterations to solve the constraints
-    size_t numIterations = 10;
+    size_t numIterations = 30;
 
     // number of steps (outer loop)
     size_t nSteps=10000;
@@ -119,6 +120,8 @@ public:
     bool positionConstraintsActivated = true;
     bool useSpatialHashing = true;
     bool floorCollision = true;
+    bool fakeWindActivated = true;
+    bool useXPBD = true;
 
 private:
     int seed = 43854397;
@@ -139,9 +142,11 @@ private:
 public:
     void initializeFromFile(const std::string& filename);
 
-    void stretchingConstraints();
+    void stretchingConstraintsXPBD();
+    void stretchingConstraints(int solver_it);
 
-    void bendingConstraints();
+    void bendingConstraintsXPBD();
+    void bendingConstraints(int solver_it);
 
     void generateCollisionConstraints();
 
@@ -151,7 +156,7 @@ public:
 
     void positionConstraints();
 
-    void projectConstraints();
+    void projectConstraints(int solver_it);
 
     void dampVelocities(T kDamping);
 
