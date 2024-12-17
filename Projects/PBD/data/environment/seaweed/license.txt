@@ -1,0 +1,11 @@
+Model Information:
+* title:	Seaweed 2
+* source:	https://sketchfab.com/3d-models/seaweed-2-93840cff90094924a6383448e8528375
+* author:	lyningsknallis (https://sketchfab.com/lyningsknallis)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Seaweed 2" (https://sketchfab.com/3d-models/seaweed-2-93840cff90094924a6383448e8528375) by lyningsknallis (https://sketchfab.com/lyningsknallis) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
