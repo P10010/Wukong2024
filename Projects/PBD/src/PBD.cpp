@@ -1,10 +1,13 @@
 #include "../include/PBD.h"
+#include "igl/Hit.h"
+#include <igl/ray_mesh_intersect.h>
 #include <cmath>
 #include <igl/edges.h>
 #include <igl/per_face_normals.h>
 #include <igl/readOBJ.h>
 #include <igl/triangle_triangle_adjacency.h>
 #include <random>
+#include <iomanip>
 
 void PBD::initializeFromFile(const std::string& filename)
 {
@@ -12,6 +15,11 @@ void PBD::initializeFromFile(const std::string& filename)
     MatrixXT V;
     MatrixXi F;
     igl::readOBJ(scene, V, F);
+
+
+
+    igl::readOBJ("../../../Projects/PBD/data/sailboat/parts/boat.obj", boatV, boatF);
+
 
     // VectorXT offset = VectorXT::Zero(V.cols());
     // offset[0] = 0.0;
@@ -51,8 +59,21 @@ void PBD::initializeFromFile(const std::string& filename)
     currentV = atRest;
     int nRows = currentV.rows();
     p.resize(nRows, 3);
+//    std::cout<<nRows<<" "<<p.rows()<<std::endl;
     m.resize(nRows);
     w.resize(nRows);
+
+    testPoint=currentV.row(0);
+
+//  std::cout<<currentV.cols()<<std::endl;
+//
+//    for (int i = 0; i < nRows; i++) {
+//      for (int j = 0; j < currentV.cols(); j++)
+//        std::cout << currentV(i, j) << " ";
+//      std::cout<<std::endl;
+//    }
+
+
 
     // Calculate mass for each vertex based on adjacent triangles
     for (int i = 0; i < nRows; i++)
@@ -84,6 +105,7 @@ void PBD::initializeFromFile(const std::string& filename)
         int u = edges(i, 0);
         int v = edges(i, 1);
         edge_lengths(i) = (atRest.row(u) - atRest.row(v)).norm();
+        maxEdgeLength=std::max(edge_lengths(i),maxEdgeLength);
     }
 
     MatrixXT normals(faces.rows(), 3);
@@ -104,6 +126,35 @@ void PBD::initializeFromFile(const std::string& filename)
             n2 = normals.row(TT(i, j));
             dihedral_angles(i, j) = std::acos(n1.dot(n2));
         }
+    }
+
+    currentBoatV=boatV;
+    int nRowsBoat = boatV.rows();
+    p.resize(nRowsBoat, 3);
+    boatM.resize(nRowsBoat);
+    boatW.resize(nRowsBoat);
+
+    // Calculate mass for each vertex based on adjacent triangles
+    for (int i = 0; i < nRowsBoat; i++)
+    {
+      boatM(i) = 10000;
+    }
+//    for (int i = 0; i < faces.rows(); i++)
+//    {
+//      int v1 = faces(i, 0);
+//      int v2 = faces(i, 1);
+//      int v3 = faces(i, 2);
+//      TV a = atRest.row(v2) - atRest.row(v1);
+//      TV b = atRest.row(v3) - atRest.row(v1);
+//      T area = a.cross(b).norm() * 0.5;
+//      m(v1) += area / 3.0;
+//      m(v2) += area / 3.0;
+//      m(v3) += area / 3.0;
+//    }
+
+    for (int i = 0; i < nRowsBoat; i++)
+    {
+      boatW(i) = 0 ;
     }
 
     v = MatrixXT::Zero(nRows, 3);
@@ -387,29 +438,28 @@ void PBD::bendingConstraints(int solver_it)
     }
 }
 
+//is q below with respect to the triangle normal?
+int PBD::isAbove(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3) {
+    // Compute triangle normal
+    TV cr = (p2 - p1).cross(p3 - p1);
+    TV n = cr.normalized();
+    T dist = (q - p1).dot(n);
+
+    return dist>0 ? 1 : -1;
+}
 // check whether point q intersects the triangle with vertices p1, p2, p3
 bool PBD::pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1,
-                                  const PBD::TV& p2, const PBD::TV& p3) const
+                                  const PBD::TV& p2, const PBD::TV& p3, T thickness) const
 {
     // Compute triangle normal
     TV cr = (p2 - p1).cross(p3 - p1);
     TV n = cr.normalized();
     T dist = (q - p1).dot(n);
 
-    int fromBelow;
-    // check if vertex is from below with respect to the triangle normal (it
-    // should be correct)
-    if (dist < 0)
-    {
-        fromBelow = -1;
-    }
-    else
-        fromBelow = 1;
-
     // note: if dist is small the point is close to the plane containing the
     // triangle, but I need to do some extra checks to verify that is actually
     // close to the triangle
-    if (fromBelow * dist > h)
+    if (abs( dist) > thickness)
         return false;
 
     // calculate barycentric coordinates of projection into the plane (from
@@ -425,7 +475,7 @@ bool PBD::pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1,
     T area = 0.5 * cr.norm();
     if (area == 0)
         return false;
-    T delta = h / (sqrt(abs(area)));
+    T delta = thickness / (sqrt(abs(area)));
     return (w12.x() >= -delta && w12.x() <= 1 + delta && w12.y() >= -delta &&
             w12.y() <= 1 + delta && w3 >= -delta &&
             w3 <= 1 + delta); // collision detected
@@ -475,13 +525,16 @@ bool PBD::edgesAreClose(const PBD::TV& x1, const PBD::TV& x2, const PBD::TV& x3,
 
 int PBD::hash(int i, int j, int k, int n)
 {
-    return (((long)i * prime1) ^ ((long)j * prime2) ^ ((long)k * prime3)) % n;
+    long hashedValue=(((long)i * prime1) ^ ((long)j * prime2) ^ ((long)k * prime3));
+    hashedValue%=n;
+    return hashedValue;
 }
-int PBD::hash(PBD::TV p, T l, int n, TV& minCoord)
+int PBD::hash(const PBD::TV point, T l, int n, const TV& minCoord)
 {
-    int i = std::floor((p.x() - minCoord.x()) / l),
-        j = std::floor((p.y() - minCoord.y()) / l),
-        k = std::floor((p.z() - minCoord.z()) / l);
+    int i = std::floor((point.x() - minCoord.x()) / l),
+        j = std::floor((point.y() - minCoord.y()) / l),
+        k = std::floor((point.z() - minCoord.z()) / l);
+//    std::cout << point.x() << " " << point.y() << point.z() << " " << i << " " << j << " " << k << " " << n << " " << hash(i, j, k, n) << std::endl;
     return hash(i, j, k, n);
 }
 
@@ -489,27 +542,48 @@ void PBD::hashVertices(std::vector<std::vector<int>>& hashTable, T boxSize,
                        TV& minCoord)
 {
     int n = hashTable.size();
-    for (int i = 0; i < p.rows(); ++i)
+//    if(p.rows()!=currentV.rows())
+//    std::cout<<p.rows()<<" "<<currentV.rows()<<"\n";
+    int nRows=currentV.rows();
+    for (int i = 0; i < nRows; i++)
     {
         TV q = p.row(i);
+//        std::cout<<std::setprecision(20);
+//        std::cout<<i<<" "<<q.x()<<" "<<q.y()<<" "<<q.z()<<std::endl;
         int hashVal = hash(q, boxSize, n, minCoord);
         hashTable[hashVal].push_back(i);
-        //    if(hashTable[hashVal].size()>10)
-        //      std::cout<<hashTable[hashVal].size()<<"\n";
+//        if(hashTable[hashVal].size()>10)
+//          std::cout<<hashVal<<" "<<hashTable[hashVal].size()<<"\n";
     }
+
+//    int boatRows=boatV.rows();
+//    for (int i = 0; i < boatRows; i++)
+//    {
+//        TV q = boatV.row(i);
+//        int hashVal = hash(q, boxSize, n, minCoord);
+//        hashTable[hashVal].push_back(i+nRows);
+//    }
 }
 
 void PBD::spatialHashing()
 {
+    int nRows=currentV.rows();
     TV minCoord = p.colwise().minCoeff();
     TV maxCoord = p.colwise().maxCoeff();
+//    TV minCoordBoat = boatV.colwise().minCoeff();
+//    TV maxCoordBoat = boatV.colwise().maxCoeff();
+//    for(int i=0;i<3;i++) {
+//        minCoord.coeffRef(i) = std::min(minCoord(i), minCoordBoat(i));
+//        maxCoord.coeffRef(i) = std::max(maxCoord(i), maxCoordBoat(i));
+//    }
 
     // T coeff = 1; //(pow(p.rows(),T(0.33)));
     T boxSize = ((maxCoord - minCoord).maxCoeff()) / 100;
-    // T boxSize = 2 * h;
-    int n = 4 * p.rows();
+//     T boxSize = 2 * h;
+    int n = 4 * (p.rows());
     std::vector<std::vector<int>> hashTable(n);
     hashVertices(hashTable, boxSize, minCoord);
+//    std::cout<<p.rows()<<std::endl;
 
     for (int f = 0; f < faces.rows(); f++)
     {
@@ -540,18 +614,98 @@ void PBD::spatialHashing()
                 for (int k = minBox[2]; k <= maxBox[2]; k++)
                 {
                     int hashVal = hash(i, j, k, n);
-                    for (int qIdx : hashTable[hashVal])
-                        if (qIdx != t1 && qIdx != t2 && qIdx != t3 &&
-                            pointIntersectsTriangle(p.row(qIdx), p1, p2, p3))
-                        {
-                            CollisionConstraint constraint;
-                            constraint.qIdx = qIdx;
-                            constraint.f = faces.row(f);
-                            collisionConstraintsList.push_back(constraint);
+                    for (int qIdx : hashTable[hashVal]) {
+                        //necessary condition for intersection: x_i -> p_i passes through the face
+                        //This is equivalent to p_i being above the triangle and x_i below, or viceversa
+                        //x_i is stored in currentV
+                        if(qIdx>nRows){
+                            qIdx-=nRows;
+                            //todo fix this
+//                            if (pointIntersectsTriangle(boatV.row(qIdx), p1, p2, p3)) {
+//                                CollisionConstraint constraint;
+//                                constraint.qIdx = qIdx;
+//                                constraint.f = faces.row(f);
+//                                constraint.fromBelow = -isAbove(boatV.row(qIdx),p1,p2,p3);
+//                                constraint.inBoat = false;
+//                                collisionConstraintsList.push_back(constraint);
+//                            }
                         }
+                        else {
+                            int qAbove = isAbove(p.row(qIdx), p1, p2, p3);
+                            if (qAbove != isAbove(currentV.row(qIdx), p1, p2, p3) &&
+                                qIdx != t1 && qIdx != t2 && qIdx != t3 &&
+                                pointIntersectsTriangle(p.row(qIdx), p1, p2, p3,h)) {
+                                CollisionConstraint constraint;
+                                constraint.qIdx = qIdx;
+                                constraint.f = faces.row(f);
+                                constraint.fromBelow = -qAbove;
+                                constraint.inBoat = false;
+                                collisionConstraintsList.push_back(constraint);
+                            }
+                        }
+                    }
                 }
     }
 
+
+//    for (int f = 0; f < boatF.rows(); f++)
+//    {
+//      int t1 = boatF(f, 0), t2 = boatF(f, 1), t3 = boatF(f, 2);
+//      TM triangleVertices;
+//      TV p1 = boatV.row(t1), p2 = boatV.row(t2), p3 = boatV.row(t3);
+//      triangleVertices << p1, p2, p3;
+//      std::array<int, 3> minBox, maxBox;
+//      // std::cout << "p1\n" << p1 << std::endl;
+//      // std::cout << "triangle vertices\n"
+//      //           << triangleVertices << std::endl;
+//      for (int i = 0; i < 3; i++)
+//      {
+//        TV tmp = triangleVertices.row(i);
+//        minBox[i] = (int)std::floor(
+//                (triangleVertices.row(i).minCoeff() - minCoord(i)) / boxSize);
+//        if(minBox[i]<0)
+//            minBox[i]=0;
+//
+//        if(triangleVertices.row(i).maxCoeff()>maxCoord(i))
+//            maxBox[i] = (int)std::floor(
+//                    (maxCoord(i) - minCoord(i)) / boxSize);
+//        else
+//            maxBox[i] = (int)std::floor(
+//                    (triangleVertices.row(i).maxCoeff() - minCoord(i)) / boxSize);
+//        //todo fix this properly
+//        if(maxBox[i]<minBox[i])
+//            maxBox[i]=minBox[i];
+//      }
+////       std::cout << "minBox\n" << minBox[0] << " " << minBox[1] << " "
+////                 << minBox[2] << std::endl;
+////       std::cout << "maxBox\n" << maxBox[0] << " " << maxBox[1] << " "
+////                   << maxBox[2] << std::endl;
+//
+//      for (int i = minBox[0]; i <= maxBox[0]; i++)
+//        for (int j = minBox[1]; j <= maxBox[1]; j++)
+//          for (int k = minBox[2]; k <= maxBox[2]; k++)
+//          {
+//            int hashVal = hash(i, j, k, n);
+//            for (int qIdx : hashTable[hashVal]) {
+//                //necessary condition for intersection: x_i -> p_i passes through the face
+//                //This is equivalent to p_i being above the triangle and x_i below, or viceversa
+//                int qAbove=isAbove(p.row(qIdx), p1, p2, p3);
+////                if(p.row(qIdx).z()<triangleVertices.row(2).minCoeff())
+//                if (qAbove != isAbove(currentV.row(qIdx), p1, p2, p3)
+//                    && pointIntersectsTriangle(p.row(qIdx), p1, p2, p3,maxEdgeLength))
+//                {
+////                    if (w(qIdx) > 0)
+////                        std::cout << "its with boat detected" << qIdx << " " << f << std::endl;
+//                    CollisionConstraint constraint;
+//                    constraint.qIdx = qIdx;
+//                    constraint.f = boatF.row(f);
+//                    constraint.inBoat = true;
+//                    constraint.fromBelow = -qAbove;
+//                    collisionConstraintsList.push_back(constraint);
+//                }
+//            }
+//          }
+//    }
 // wrong implementation of edge-edge collisions
 //  for (int e = 0; e < edges.rows(); e++)
 //  {
@@ -600,6 +754,33 @@ void PBD::spatialHashing()
 //        }
 //  }
 }
+
+void PBD::generateCollisionConstraintsStatic(){
+  // Clear previous collision constraints with static objects
+  collisionConstraintsStaticList.clear();
+  // Iterate through all vertices
+  for (int i = 0; i < p.rows(); ++i){
+    //check if the ray x_i -> p_i intersects or is inside the boat
+    TV rayDir=p.row(i)-currentV.row(i);
+    std::vector<igl::Hit> hits;
+    TV xi=currentV.row(i);
+    if(igl::ray_mesh_intersect(xi,rayDir,boatV,boatF,hits)){
+      for(auto hit : hits){
+        if(hit.t<1.f){
+//          std::cout<<i<<" "<<hit.t<<std::endl;
+          CollisionConstraintStatic constraint;
+          constraint.pIdx=i;
+          TV tmp=hit.t*rayDir;
+          constraint.q=xi+tmp;
+          TV p1=boatV.row(boatF(hit.id,0)), p2=boatV.row(boatF(hit.id,1)), p3=boatV.row(boatF(hit.id,2));
+          constraint.n=((p2 - p1).cross(p3 - p1)).normalized();
+          collisionConstraintsStaticList.push_back(constraint);
+          break;
+        }
+      }
+    }
+  }
+}
 void PBD::generateCollisionConstraints()
 {
     // Clear previous collision constraints
@@ -622,12 +803,31 @@ void PBD::generateCollisionConstraints()
                     continue;
                 TV q = p.row(i);
                 TV p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
-
-                if (pointIntersectsTriangle(q, p1, p2, p3))
+                int qAbove= isAbove(q, p1, p2, p3);
+                if (qAbove != isAbove(currentV.row(i), p1, p2, p3) && pointIntersectsTriangle(q, p1, p2, p3,maxEdgeLength))
                 {
                     CollisionConstraint constraint;
                     constraint.qIdx = i;
                     constraint.f = faces.row(f);
+                    constraint.fromBelow=-qAbove;
+                    constraint.inBoat=false;
+                    collisionConstraintsList.push_back(constraint);
+                }
+            }
+
+            for (int f = 0; f < boatF.rows(); f++)
+            {
+                int t1 = boatF(f, 0), t2 = boatF(f, 1), t3 = boatF(f, 2);
+                TV q = p.row(i);
+                TV p1 = boatV.row(t1), p2 = boatV.row(t2), p3 = boatV.row(t3);
+                int qAbove= isAbove(q, p1, p2, p3);
+                if (qAbove != isAbove(currentV.row(i), p1, p2, p3) && pointIntersectsTriangle(q, p1, p2, p3,maxEdgeLength))
+                {
+                    CollisionConstraint constraint;
+                    constraint.qIdx = i;
+                    constraint.f = boatF.row(f);
+                    constraint.fromBelow=-qAbove;
+                    constraint.inBoat=true;
                     collisionConstraintsList.push_back(constraint);
                 }
             }
@@ -635,6 +835,20 @@ void PBD::generateCollisionConstraints()
     }
 }
 
+void PBD::collisionConstraintsStatic(){
+  for (auto& constraint : collisionConstraintsStaticList)
+  {
+    TV itsPoint=p.row(constraint.pIdx);
+    T dist=(itsPoint-constraint.q).dot(constraint.n);
+//    std::cout<<dist<<std::endl;
+    if(dist<0){
+//      std::cout<<"idx: "<<constraint.pIdx<<" dist:"<<dist<<std::endl;
+      TV grad=constraint.n;
+      //only a point is involved and the squared norm of the normalized normal is 1
+      p.row(constraint.pIdx)-=(dist)*grad;
+    }
+  }
+}
 void PBD::collisionConstraints()
 {
     for (auto& constraint : collisionConstraintsList)
@@ -642,11 +856,19 @@ void PBD::collisionConstraints()
         int t1 = constraint.f(0), t2 = constraint.f(1), t3 = constraint.f(2);
 
         TV q = p.row(constraint.qIdx);
-        TV p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
+        TV p1,p2,p3;
+        if(!constraint.inBoat)
+         p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
+        else
+          p1 = boatV.row(t1), p2=boatV.row(t2), p3=boatV.row(t3);
 
         // Project the vertex and triangle vertices to satisfy the constraint
         T w_q = w(constraint.qIdx);
-        T w_p1 = w(t1), w_p2 = w(t2), w_p3 = w(t3);
+        T w_p1,w_p2,w_p3;
+        if(!constraint.inBoat)
+          w_p1 = w(t1), w_p2 = w(t2), w_p3 = w(t3);
+        else
+          w_p1 = boatW(t1), w_p2 = boatW(t2), w_p3 = boatW(t3);
 
         T sum_w = w_q + w_p1 + w_p2 + w_p3;
         if (sum_w == 0)
@@ -660,12 +882,12 @@ void PBD::collisionConstraints()
         int fromBelow;
         // check if vertex is from below with respect to the triangle normal (it
         // should be correct)
-        if (dist < 0)
-            fromBelow = -1;
-        else
-            fromBelow = 1;
-
-        if (fromBelow * dist < h)
+//        if (dist < 0)
+//            fromBelow = -1;
+//        else
+//            fromBelow = 1;
+        fromBelow=constraint.fromBelow;
+        if (fromBelow * dist < (constraint.inBoat ? maxEdgeLength : h))
         {
             // I manually calculated the derivative, I know this code is pretty
             // ugly, and probably it could be written in a more compact form.
@@ -740,9 +962,15 @@ void PBD::collisionConstraints()
             //        constraint.gradp3<<std::endl;
 
             p.row(constraint.qIdx) += dp * w_q * gradq;
-            p.row(t1) += dp * w_p1 * gradp1;
-            p.row(t2) += dp * w_p2 * gradp2;
-            p.row(t3) += dp * w_p3 * gradp3;
+            if(!constraint.inBoat) {
+              p.row(t1) += dp * w_p1 * gradp1;
+              p.row(t2) += dp * w_p2 * gradp2;
+              p.row(t3) += dp * w_p3 * gradp3;
+            }
+            else{
+              p.row(constraint.qIdx) += 10* dp * w_q * gradq;
+//              std::cout<<"Collision with boat applied"<<constraint.qIdx<<" "<<constraint.f<<std::endl;
+            }
 
             constraint.n = n * fromBelow;
 
@@ -791,6 +1019,9 @@ void PBD::positionConstraints()
 
 void PBD::projectConstraints(int solver_it)
 {
+
+
+
     if (stretchingConstraintsActivated)
         if (useXPBD)
             PBD::stretchingConstraintsXPBD();
@@ -804,11 +1035,17 @@ void PBD::projectConstraints(int solver_it)
         else
             PBD::bendingConstraints(solver_it);
 
-    if (collisionConstraintsActivated)
-        PBD::collisionConstraints();
+    if (collisionConstraintsActivated){
+      PBD::collisionConstraints();
+      PBD::collisionConstraintsStatic();
+    }
+
 
     if (positionConstraintsActivated)
         PBD::positionConstraints();
+
+
+
 }
 
 void PBD::dampVelocities(T kDamping)
@@ -877,7 +1114,6 @@ bool PBD::advanceOneStep(int step)
     }
 
     dampVelocities(k_damping);
-
     for (int i = 0; i < nRows; i++)
     {
         // Verlet integration, as in paper
@@ -888,8 +1124,10 @@ bool PBD::advanceOneStep(int step)
     lambdas.setZero(constraint_idx.size());
 
     // generate collision constraints
-    if (collisionConstraintsActivated)
-        generateCollisionConstraints();
+    if (collisionConstraintsActivated) {
+      generateCollisionConstraints();
+      generateCollisionConstraintsStatic();
+    }
 
     // Solve constraints
     for (int it = 0; it < numIterations; it++)

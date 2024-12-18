@@ -33,6 +33,10 @@ public:
     // data structure for collision constraints
     struct CollisionConstraint
     {
+        bool inBoat=false; //is the collision with the boat?
+
+        int fromBelow;
+
         int qIdx; // vertex
 
         IV f; // face
@@ -40,7 +44,35 @@ public:
         TV n = {0, 0, 0}; // normal
     };
 
+    // data structure for collision constraints with static objects (in our scene, the boat)
+    struct CollisionConstraintStatic
+    {
+
+        int pIdx; // vertex
+
+        TV q; // face
+
+        TV n = {0, 0, 0}; // normal
+    };
+
 public:
+    Eigen::MatrixXd boatV;
+    Eigen::MatrixXi boatF;
+
+    MatrixXT currentBoatV;        // boat vertex positions, 'x' in paper, (V x 3)
+
+    // vector with 1/mass of each vertex, (V x 1)
+    VectorXT boatW;
+
+    // vector with mass of each vertex, (V x 1)
+    VectorXT boatM;
+
+    // positions, (V x 3)
+    MatrixXT boatP;
+
+    // velocities, (V x 3)
+//    MatrixXT v;
+
     std::string scene;        // path to the obj file
     MatrixXi faces;           // (F x 3)
     MatrixXi TT;              // triangle-triangle adjacencies, (F x 3)
@@ -81,6 +113,13 @@ public:
     // cloth thickness [m]
     T h = 0.001;
 
+    TV testPoint;
+
+//    //minimum distance from rigid body
+//    T minDist=0
+
+    T maxEdgeLength=0;
+
     // friction coefficient
     T mu = 0.5;
 
@@ -106,6 +145,9 @@ public:
 
     // collision constraints
     std::vector<CollisionConstraint> collisionConstraintsList;
+
+    // static collision constraints
+    std::vector<CollisionConstraintStatic> collisionConstraintsStaticList;
 
     // position contraints
     // indices, (V' x 1)
@@ -136,8 +178,11 @@ private:
     std::vector<std::vector<int>> incidentFaces;
     std::vector<std::vector<int>> adjList;
     int hash(int i, int j, int k, int n);
-    int hash(PBD::TV p, T l, int n, TV& minCoord);
-    bool pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3) const;
+    int hash(const PBD::TV point, T l, int n, const TV& minCoord);
+
+    static int isAbove(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3) ;
+
+    bool pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3, T thickness) const;
 
     bool edgesAreClose(const PBD::TV& x1, const PBD::TV& x2, const PBD::TV& x3, const PBD::TV& x4) const;
 
@@ -155,7 +200,11 @@ public:
 
     void generateCollisionConstraints();
 
+    void generateCollisionConstraintsStatic();
+
     void collisionConstraints();
+
+    void collisionConstraintsStatic();
 
     void applyFriction();
 
