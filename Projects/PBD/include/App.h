@@ -53,10 +53,9 @@ public:
         psMesh->setSurfaceColor(glm::vec3(252. / 255., 247. / 255., 216. / 255.));
         psMesh->setEdgeWidth(0.0);
 
-        // TODO: change place?
-        Eigen::MatrixXd boatV;
-        Eigen::MatrixXi boatF;
-        igl::readOBJ("../../../Projects/PBD/data/sailboat/parts/boat.obj", boatV, boatF);
+
+        Eigen::MatrixXd boatV=simulation.boatV;
+        Eigen::MatrixXi boatF=simulation.boatF;
         polyscope::SurfaceMesh* boatMesh = polyscope::registerSurfaceMesh("boat", boatV, boatF);
         boatMesh->setSmoothShade(false);
         boatMesh->setSurfaceColor(glm::vec3(161. / 255., 77. / 255., 34. / 255.));
