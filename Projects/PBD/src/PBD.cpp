@@ -798,8 +798,8 @@ void PBD::spatialHashingStatic() {
 //    }
 
   // T coeff = 1; //(pow(p.rows(),T(0.33)));
-  T boxSize = ((maxCoord - minCoord).maxCoeff()) / 100;
-//  T boxSize = maxEdgeLength;
+//  T boxSize = ((maxCoord - minCoord).maxCoeff()) / 100;
+  T boxSize = maxEdgeLength;
   int n = 4 * (p.rows());
   std::vector<std::vector<int>> hashTable(n);
   hashVertices(hashTable, boxSize, minCoord);
@@ -809,6 +809,7 @@ void PBD::spatialHashingStatic() {
   //-1: not checked; 0: pi is inside, but xi is outside; 1: segment completely inside the mesh
   std::vector<int> rayInsideMesh(p.rows(),-1);
 
+  std::vector<bool> toCheck(p.rows(),false);
   for (int f = 0; f < boatF.rows(); f++)
     {
       int t1 = boatF(f, 0), t2 = boatF(f, 1), t3 = boatF(f, 2);
@@ -848,42 +849,56 @@ void PBD::spatialHashingStatic() {
           {
             int hashVal = hash(i, j, k, n);
             for (int qIdx : hashTable[hashVal]) {
+                TV closestPoint;
+                TV xi=currentV.row(qIdx);
+                TV pi=p.row(qIdx);
+                T distSqr=closestToPointInTriangle(pi,p1,p2,p3,closestPoint);
+                if(!toCheck[qIdx] || distSqr<(pi-closestPoints[qIdx].q).squaredNorm()) {
+  //                        std::cout<<qIdx<<"  "<<closestPoint.x()<<" "<<closestPoint.y()<<" "<<closestPoint.z()<<" "<<distSqr<<std::endl;
+                  closestPoints[qIdx].pIdx = qIdx;
+                  closestPoints[qIdx].q=closestPoint;
+                  closestPoints[qIdx].n = ((p2 - p1).cross(p3 - p1)).normalized();
+                }
+                toCheck[qIdx]=true;
+
+                continue;
                 //necessary condition for intersection: x_i -> p_i passes through the face
                 //A necessary condition far that is p_i being above the triangle and x_i below, or viceversa
                 int qAbove=isAbove(p.row(qIdx), p1, p2, p3);
-                TV xi=currentV.row(qIdx);
-                TV pi=p.row(qIdx);
+
                 TV rayDir=pi-xi;
                 igl::Hit hit{};
 //                if(p.row(qIdx).z()<triangleVertices.row(2).minCoeff())
 //qAbove != isAbove(currentV.row(qIdx), p1, p2, p3) && pointIntersectsTriangle(p.row(qIdx), p1, p2, p3,maxEdgeLength)
                 if (igl::ray_triangle_intersect(xi,rayDir,boatV,boatF,f,hit))
-                  if(hit.t<1.f)
+//                  if(hit.t<1.f)
                 {
 //                    if (w(qIdx) > 0)
 //                        std::cout << "its with boat detected" << qIdx << " " << f << std::endl;
                     bool firstIts;
                     if(rayInsideMesh[qIdx]==-1){
                       std::vector<igl::Hit> hits;
-                      //todo this is slow, but hopefully this check will not be performed too often...
-                      //todo it can probably be replaced by a clever ray-triangle intersection test... or maybe just doing spatial hashing for xi too
+                      //this is slow, but hopefully this check will not be performed too often...
+                      //it can probably be replaced by a clever ray-triangle intersection test... or maybe just doing spatial hashing for xi too
                       igl::ray_mesh_intersect(xi,rayDir,boatV,boatF,hits);
-                      rayInsideMesh[qIdx]=hits.size()%2==1 ? 0 : 1;
+                      rayInsideMesh[qIdx]=hits.size()%2; //==1 ? 0 : 1;
                       firstIts=true;
 //                      std::cout<<qIdx<<" "<<pi<<" "<<hits.size()<<"\n";
                     }
                     else
                       firstIts=false;
-                    if( rayInsideMesh[qIdx]==0) {
-                      CollisionConstraintStatic constraint;
-                      constraint.pIdx = qIdx;
-                      constraint.q = xi + rayDir * hit.t;
-                      constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
-                      collisionConstraintsStaticList.push_back(constraint);
+                    if( rayInsideMesh[qIdx]==0 ) {
+                      if(hit.t<1.f) {
+                        CollisionConstraintStatic constraint;
+                        constraint.pIdx = qIdx;
+                        constraint.q = xi + rayDir * hit.t;
+                        constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
+                        collisionConstraintsStaticList.push_back(constraint);
+                      }
                     }
                     else{
                       TV closestPoint;
-                      T distSqr=closestToPointInTriangle(p.row(qIdx),p1,p2,p3,closestPoint);
+                      T distSqr=closestToPointInTriangle(pi,p1,p2,p3,closestPoint);
                       if(firstIts || distSqr<(pi-closestPoints[qIdx].q).squaredNorm()) {
 //                        std::cout<<qIdx<<"  "<<closestPoint.x()<<" "<<closestPoint.y()<<" "<<closestPoint.z()<<" "<<distSqr<<std::endl;
                         closestPoints[qIdx].pIdx = qIdx;
@@ -905,13 +920,73 @@ void PBD::spatialHashingStatic() {
 //      std::cout<<std::endl;
     }
 
+  for (int i = 0; i < p.rows(); ++i) {
+    if(toCheck[i]){
+      //check if the ray x_i -> p_i intersects or is inside the boat
+      TV rayDir = p.row(i) - currentV.row(i);
+      std::vector<igl::Hit> hits;
+      TV xi = currentV.row(i);
+      TV pi=p.row(i);
+      if (igl::ray_mesh_intersect(xi, rayDir, boatV, boatF, hits)) {
+        bool found = false;
+        if (hits.size() % 2 == 0) {
+          for (auto hit: hits) {
+            if (hit.t < 1.f) {
+  //          std::cout<<i<<" "<<hit.t<<std::endl;
+              CollisionConstraintStatic constraint;
+              constraint.pIdx = i;
+              TV tmp = hit.t * rayDir;
+              constraint.q = xi + tmp;
+              TV p1 = boatV.row(boatF(hit.id, 0)), p2 = boatV.row(boatF(hit.id, 1)), p3 = boatV.row(boatF(hit.id, 2));
+              constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
+              collisionConstraintsStaticList.push_back(constraint);
+              found = true;
+              break;
+            }
+          }
+        } else {
+
+
+          TV zAxis = {0,0,1};
+          if (!found && igl::ray_mesh_intersect(pi, zAxis, boatV, boatF, hits))
+            if (hits[0].t <= maxEdgeLength) {
+  //            std::cout << i << std::endl;
+              auto hit = hits[0];
+              CollisionConstraintStatic constraint;
+              constraint.pIdx = i;
+              TV tmp = hit.t * zAxis;
+              constraint.q = pi + tmp;
+              constraint.n = zAxis;
+              collisionConstraintsStaticList.push_back(constraint);
+            }
+
+        }
+        /*
+        if(!found && hits.size()%2!=0)
+          std::cout<<i<<" "<<hits.size()<<std::endl;
+        if (!found && igl::ray_mesh_intersect(xi, -rayDir, boatV, boatF, hits)) {
+          std::cout<<i<<std::endl;
+          auto hit = hits[0];
+          CollisionConstraintStatic constraint;
+          constraint.pIdx = i;
+          TV tmp = -hit.t * rayDir;
+          constraint.q = xi + tmp;
+          TV p1 = boatV.row(boatF(hit.id, 0)), p2 = boatV.row(boatF(hit.id, 1)), p3 = boatV.row(boatF(hit.id, 2));
+          constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
+          collisionConstraintsStaticList.push_back(constraint);
+        }
+         */
+      }
+    }
+  }
+
 //  std::cout<<collisionConstraintsStaticList.size()<<std::endl;
 }
 void PBD::generateCollisionConstraintsStatic(){
   // Clear previous collision constraints with static objects
   collisionConstraintsStaticList.clear();
 
-  if(false && useSpatialHashing)
+  if(useSpatialHashing)
     spatialHashingStatic();
   else {
     // Iterate through all vertices
@@ -954,7 +1029,6 @@ void PBD::generateCollisionConstraintsStatic(){
           }
         }
         /*
-        //todo simply check if hits.size()%2!=0 instead
         if(!found && hits.size()%2!=0)
           std::cout<<i<<" "<<hits.size()<<std::endl;
         if (!found && igl::ray_mesh_intersect(xi, -rayDir, boatV, boatF, hits)) {
@@ -972,8 +1046,9 @@ void PBD::generateCollisionConstraintsStatic(){
       }
     }
 
-    std::cout<<collisionConstraintsStaticList.size()<<std::endl;
   }
+  std::cout<<p.rows()<<" "<<collisionConstraintsStaticList.size()<<std::endl;
+
 }
 void PBD::generateCollisionConstraints()
 {
@@ -998,7 +1073,7 @@ void PBD::generateCollisionConstraints()
                 TV q = p.row(i);
                 TV p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
                 int qAbove= isAbove(q, p1, p2, p3);
-                if (qAbove != isAbove(currentV.row(i), p1, p2, p3) && pointIntersectsTriangle(q, p1, p2, p3,maxEdgeLength))
+                if (qAbove != isAbove(currentV.row(i), p1, p2, p3) && pointIntersectsTriangle(q, p1, p2, p3,h))
                 {
                     CollisionConstraint constraint;
                     constraint.qIdx = i;
@@ -1009,24 +1084,25 @@ void PBD::generateCollisionConstraints()
                 }
             }
 
-            for (int f = 0; f < boatF.rows(); f++)
-            {
-                int t1 = boatF(f, 0), t2 = boatF(f, 1), t3 = boatF(f, 2);
-                TV q = p.row(i);
-                TV p1 = boatV.row(t1), p2 = boatV.row(t2), p3 = boatV.row(t3);
-                int qAbove= isAbove(q, p1, p2, p3);
-                if (qAbove != isAbove(currentV.row(i), p1, p2, p3) && pointIntersectsTriangle(q, p1, p2, p3,maxEdgeLength))
-                {
-                    CollisionConstraint constraint;
-                    constraint.qIdx = i;
-                    constraint.f = boatF.row(f);
-                    constraint.fromBelow=-qAbove;
-                    constraint.inBoat=true;
-                    collisionConstraintsList.push_back(constraint);
-                }
-            }
+//            for (int f = 0; f < boatF.rows(); f++)
+//            {
+//                int t1 = boatF(f, 0), t2 = boatF(f, 1), t3 = boatF(f, 2);
+//                TV q = p.row(i);
+//                TV p1 = boatV.row(t1), p2 = boatV.row(t2), p3 = boatV.row(t3);
+//                int qAbove= isAbove(q, p1, p2, p3);
+//                if (qAbove != isAbove(currentV.row(i), p1, p2, p3) && pointIntersectsTriangle(q, p1, p2, p3,maxEdgeLength))
+//                {
+//                    CollisionConstraint constraint;
+//                    constraint.qIdx = i;
+//                    constraint.f = boatF.row(f);
+//                    constraint.fromBelow=-qAbove;
+//                    constraint.inBoat=true;
+//                    collisionConstraintsList.push_back(constraint);
+//                }
+//            }
         }
     }
+//    std::cout<<"Number of dynamic collision constraints: "<<collisionConstraintsList.size()<<std::endl;
 }
 
 void PBD::collisionConstraintsStatic(){
@@ -1299,6 +1375,7 @@ bool PBD::advanceOneStep(int step)
     for (int i = 0; i < nRows; i++)
     {
         v.row(i) += dt * g;
+        v.row(i) += constantVelocity;
 
         if (fakeWindActivated)
         {
@@ -1312,7 +1389,11 @@ bool PBD::advanceOneStep(int step)
     {
         // Verlet integration, as in paper
         p.row(i) = currentV.row(i) + dt * v.row(i);
+
     }
+
+    for(int i=0;i<boatV.rows();i++)
+      boatV.row(i)+=dt*constantVelocity;
 
     // for XPBD
     lambdas.setZero(constraint_idx.size());
@@ -1323,6 +1404,11 @@ bool PBD::advanceOneStep(int step)
       generateCollisionConstraintsStatic();
     }
 
+    for (int i = 0; i < posConstraintsIdxs.rows(); ++i) {
+      int idx = posConstraintsIdxs[i];
+      TV dp = constantVelocity * dt;
+      posConstraintsV.row(i) += dp;
+    }
     // Solve constraints
     for (int it = 0; it < numIterations; it++)
     {

@@ -155,6 +155,8 @@ public:
     // vertex positions, (V' x 3)
     MatrixXT posConstraintsV;
 
+    TV constantVelocity={0.5,0,0};
+
 public:
     bool stretchingConstraintsActivated = true;
     bool bendingConstraintsActivated = true;

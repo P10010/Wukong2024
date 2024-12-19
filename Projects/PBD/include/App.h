@@ -17,6 +17,7 @@ public:
     int static_solve_step = 0;
 
     polyscope::SurfaceMesh* psMesh;
+    polyscope::SurfaceMesh* boatMesh;
 
     T t = 0;
 
@@ -56,7 +57,7 @@ public:
 
         Eigen::MatrixXd boatV=simulation.boatV;
         Eigen::MatrixXi boatF=simulation.boatF;
-        polyscope::SurfaceMesh* boatMesh = polyscope::registerSurfaceMesh("boat", boatV, boatF);
+        boatMesh = polyscope::registerSurfaceMesh("boat", boatV, boatF);
         boatMesh->setSmoothShade(false);
         boatMesh->setSurfaceColor(glm::vec3(161. / 255., 77. / 255., 34. / 255.));
         boatMesh->setEdgeWidth(0.0);
@@ -196,6 +197,8 @@ public:
             // TODO: why was this necessary?
             // vectorToIGLMatrix<T, 3>(simulation.currentV, meshV);
             psMesh->updateVertexPositions(meshV);
+            Eigen::MatrixXd boatMeshV=simulation.boatV;
+            boatMesh->updateVertexPositions(boatMeshV);
             if (finished)
                 run_sim = false;
         }
