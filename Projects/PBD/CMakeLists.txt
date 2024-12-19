@@ -1,15 +1,12 @@
 if (APPLE)
-    set(DEPS boost_filesystem tbb 
-        tbbmalloc tbbmalloc_proxy 
+    set(DEPS boost_filesystem
         igl::core
         suitesparseconfig metis cholmod amd camd ccolamd colamd
         gmp mpfr
         )
 else()
-    set(DEPS boost_filesystem tbb 
-        tbbmalloc tbbmalloc_proxy 
-        mkl_intel_lp64 igl::core
-        mkl_sequential mkl_core 
+    set(DEPS boost_filesystem
+            igl::core
         suitesparseconfig metis cholmod amd camd ccolamd colamd
         gmp mpfr
         )
@@ -26,8 +23,12 @@ add_library(PBDLib STATIC ${HEADERS} ${SOURCES})
 if (APPLE)
     find_package(CHOLMOD REQUIRED)
     include_directories(${CHOLMOD_INCLUDES})
-    find_package(TBB REQUIRED)
+#    find_package(TBB REQUIRED)
     target_link_libraries(PBD ${CHOLMOD_LIBRARIES} TBB::tbb)
+else()
+    find_package(CHOLMOD REQUIRED)
+    include_directories(${CHOLMOD_INCLUDES})
+    target_link_libraries(PBD ${CHOLMOD_LIBRARIES})
 endif()
 
 

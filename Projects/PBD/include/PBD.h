@@ -6,7 +6,6 @@
 #include <Eigen/Geometry>
 #include <Eigen/Sparse>
 #include <random>
-#include <tbb/tbb.h>
 #include <unordered_map>
 #include <utility>
 

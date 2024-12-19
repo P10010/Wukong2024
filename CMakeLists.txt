@@ -42,15 +42,6 @@ include(libigl)
 igl_include(predicates)
 
 find_package(CGAL REQUIRED COMPONENTS Core)
-  
-if (NOT APPLE)
-    add_definitions(-DEIGEN_USE_MKL_ALL)
-    add_definitions(-DMKL_LP64)
-
-    set(MKLROOT "/opt/intel/oneapi/mkl/2024.1")
-    include_directories(${MKLROOT}/include)
-    link_directories(${MKLROOT}/lib)
-endif()
 
 include_directories(/usr/local/include/suitesparse)
 include_directories(/usr/include/suitesparse)
