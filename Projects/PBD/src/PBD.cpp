@@ -447,9 +447,41 @@ int PBD::isAbove(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const P
 
     return dist>0 ? 1 : -1;
 }
+
+//returns the squared norm
+T PBD::closestToPointInTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3, PBD::TV& closestPoint){
+  // Compute triangle normal
+  TV cr = (p2 - p1).cross(p3 - p1);
+  TV n = cr.normalized();
+  T dist = (q - p1).dot(n);
+
+  // calculate barycentric coordinates of projection into the plane (from
+  // Robust Treatment of Collisions, Contact and Friction for Cloth Animation)
+  TV x13 = p1 - p3, x23 = p2 - p3, x43 = q - p3;
+  TM2 A;
+  A << x13.dot(x13), x13.dot(x23), x13.dot(x23), x23.dot(x23);
+  TV2 b = {x13.dot(x43), x23.dot(x43)};
+  TV2 w12 = A.colPivHouseholderQr().solve(b);
+
+
+//  //Clamp the barycentric coordinates to 0,1 so that they lie inside the triangle
+//  std::clamp(w12[0],0.,1.);
+//  std::clamp(w12[1],0.,1.);
+
+  T w3 = 1 - w12[0] - w12[1];
+
+  //closest point on the plane is not inside the triangle -> choose the vertex p1 (todo)
+  if(w12[0]<0 || w12[0]>1 || w12[1]<0 || w12[1]>1 || w3<0 || w3>1)
+    closestPoint=p1;
+  else
+    closestPoint=w12[0]*p1+w12[1]*p2+w3*p3;
+
+  //return squared norm of the distance
+  return (closestPoint-q).squaredNorm();
+}
 // check whether point q intersects the triangle with vertices p1, p2, p3
 bool PBD::pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1,
-                                  const PBD::TV& p2, const PBD::TV& p3, T thickness) const
+                                  const PBD::TV& p2, const PBD::TV& p3, T thickness)
 {
     // Compute triangle normal
     TV cr = (p2 - p1).cross(p3 - p1);
@@ -754,31 +786,193 @@ void PBD::spatialHashing()
 //        }
 //  }
 }
+void PBD::spatialHashingStatic() {
+  int nRows = currentV.rows();
+  TV minCoord = p.colwise().minCoeff();
+  TV maxCoord = p.colwise().maxCoeff();
+//    TV minCoordBoat = boatV.colwise().minCoeff();
+//    TV maxCoordBoat = boatV.colwise().maxCoeff();
+//    for(int i=0;i<3;i++) {
+//        minCoord.coeffRef(i) = std::min(minCoord(i), minCoordBoat(i));
+//        maxCoord.coeffRef(i) = std::max(maxCoord(i), maxCoordBoat(i));
+//    }
 
+  // T coeff = 1; //(pow(p.rows(),T(0.33)));
+  T boxSize = ((maxCoord - minCoord).maxCoeff()) / 100;
+//  T boxSize = maxEdgeLength;
+  int n = 4 * (p.rows());
+  std::vector<std::vector<int>> hashTable(n);
+  hashVertices(hashTable, boxSize, minCoord);
+
+  //for all the segments xi->pi that lie completely inside the mesh, find the closest point on the mesh
+  std::vector<CollisionConstraintStatic> closestPoints(p.rows());
+  //-1: not checked; 0: pi is inside, but xi is outside; 1: segment completely inside the mesh
+  std::vector<int> rayInsideMesh(p.rows(),-1);
+
+  for (int f = 0; f < boatF.rows(); f++)
+    {
+      int t1 = boatF(f, 0), t2 = boatF(f, 1), t3 = boatF(f, 2);
+      TM triangleVertices;
+      TV p1 = boatV.row(t1), p2 = boatV.row(t2), p3 = boatV.row(t3);
+      triangleVertices << p1, p2, p3;
+      std::array<int, 3> minBox{}, maxBox{};
+      // std::cout << "p1\n" << p1 << std::endl;
+      // std::cout << "triangle vertices\n"
+      //           << triangleVertices << std::endl;
+      for (int i = 0; i < 3; i++)
+      {
+        TV tmp = triangleVertices.row(i);
+        minBox[i] = (int)std::floor(
+                (triangleVertices.row(i).minCoeff() - minCoord(i)) / boxSize);
+        if(minBox[i]<0)
+            minBox[i]=0;
+
+        if(triangleVertices.row(i).maxCoeff()>maxCoord(i))
+            maxBox[i] = (int)std::floor(
+                    (maxCoord(i) - minCoord(i)) / boxSize);
+        else
+            maxBox[i] = (int)std::floor(
+                    (triangleVertices.row(i).maxCoeff() - minCoord(i)) / boxSize);
+        //todo fix this properly
+        if(maxBox[i]<minBox[i])
+            maxBox[i]=minBox[i];
+      }
+//       std::cout << "minBox\n" << minBox[0] << " " << minBox[1] << " "
+//                 << minBox[2] << std::endl;
+//       std::cout << "maxBox\n" << maxBox[0] << " " << maxBox[1] << " "
+//                   << maxBox[2] << std::endl;
+
+      for (int i = minBox[0]; i <= maxBox[0]; i++)
+        for (int j = minBox[1]; j <= maxBox[1]; j++)
+          for (int k = minBox[2]; k <= maxBox[2]; k++)
+          {
+            int hashVal = hash(i, j, k, n);
+            for (int qIdx : hashTable[hashVal]) {
+                //necessary condition for intersection: x_i -> p_i passes through the face
+                //A necessary condition far that is p_i being above the triangle and x_i below, or viceversa
+                int qAbove=isAbove(p.row(qIdx), p1, p2, p3);
+                TV xi=currentV.row(qIdx);
+                TV pi=p.row(qIdx);
+                TV rayDir=pi-xi;
+                igl::Hit hit{};
+//                if(p.row(qIdx).z()<triangleVertices.row(2).minCoeff())
+//qAbove != isAbove(currentV.row(qIdx), p1, p2, p3) && pointIntersectsTriangle(p.row(qIdx), p1, p2, p3,maxEdgeLength)
+                if (igl::ray_triangle_intersect(xi,rayDir,boatV,boatF,f,hit))
+                  if(hit.t<1.f)
+                {
+//                    if (w(qIdx) > 0)
+//                        std::cout << "its with boat detected" << qIdx << " " << f << std::endl;
+                    bool firstIts;
+                    if(rayInsideMesh[qIdx]==-1){
+                      std::vector<igl::Hit> hits;
+                      //todo this is slow, but hopefully this check will not be performed too often...
+                      //todo it can probably be replaced by a clever ray-triangle intersection test... or maybe just doing spatial hashing for xi too
+                      igl::ray_mesh_intersect(xi,rayDir,boatV,boatF,hits);
+                      rayInsideMesh[qIdx]=hits.size()%2==1 ? 0 : 1;
+                      firstIts=true;
+//                      std::cout<<qIdx<<" "<<pi<<" "<<hits.size()<<"\n";
+                    }
+                    else
+                      firstIts=false;
+                    if( rayInsideMesh[qIdx]==0) {
+                      CollisionConstraintStatic constraint;
+                      constraint.pIdx = qIdx;
+                      constraint.q = xi + rayDir * hit.t;
+                      constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
+                      collisionConstraintsStaticList.push_back(constraint);
+                    }
+                    else{
+                      TV closestPoint;
+                      T distSqr=closestToPointInTriangle(p.row(qIdx),p1,p2,p3,closestPoint);
+                      if(firstIts || distSqr<(pi-closestPoints[qIdx].q).squaredNorm()) {
+//                        std::cout<<qIdx<<"  "<<closestPoint.x()<<" "<<closestPoint.y()<<" "<<closestPoint.z()<<" "<<distSqr<<std::endl;
+                        closestPoints[qIdx].pIdx = qIdx;
+                        closestPoints[qIdx].q=closestPoint;
+                        closestPoints[qIdx].n = ((p2 - p1).cross(p3 - p1)).normalized();
+                      }
+                    }
+                }
+            }
+          }
+    }
+
+  for(int i=0;i<p.rows();i++)
+    if(rayInsideMesh[i]==1) {
+      collisionConstraintsStaticList.push_back(closestPoints[i]);
+//      std::cout<<i<<" ";
+//      for(int j=0;j<3;j++)
+//       std::cout<<closestPoints[i].q[j]<<" ";
+//      std::cout<<std::endl;
+    }
+
+//  std::cout<<collisionConstraintsStaticList.size()<<std::endl;
+}
 void PBD::generateCollisionConstraintsStatic(){
   // Clear previous collision constraints with static objects
   collisionConstraintsStaticList.clear();
-  // Iterate through all vertices
-  for (int i = 0; i < p.rows(); ++i){
-    //check if the ray x_i -> p_i intersects or is inside the boat
-    TV rayDir=p.row(i)-currentV.row(i);
-    std::vector<igl::Hit> hits;
-    TV xi=currentV.row(i);
-    if(igl::ray_mesh_intersect(xi,rayDir,boatV,boatF,hits)){
-      for(auto hit : hits){
-        if(hit.t<1.f){
+
+  if(false && useSpatialHashing)
+    spatialHashingStatic();
+  else {
+    // Iterate through all vertices
+    for (int i = 0; i < p.rows(); ++i) {
+      //check if the ray x_i -> p_i intersects or is inside the boat
+      TV rayDir = p.row(i) - currentV.row(i);
+      std::vector<igl::Hit> hits;
+      TV xi = currentV.row(i);
+      TV pi=p.row(i);
+      if (igl::ray_mesh_intersect(xi, rayDir, boatV, boatF, hits)) {
+        bool found = false;
+        if(hits.size()%2==0) {
+          for (auto hit: hits) {
+            if (hit.t < 1.f) {
 //          std::cout<<i<<" "<<hit.t<<std::endl;
-          CollisionConstraintStatic constraint;
-          constraint.pIdx=i;
-          TV tmp=hit.t*rayDir;
-          constraint.q=xi+tmp;
-          TV p1=boatV.row(boatF(hit.id,0)), p2=boatV.row(boatF(hit.id,1)), p3=boatV.row(boatF(hit.id,2));
-          constraint.n=((p2 - p1).cross(p3 - p1)).normalized();
-          collisionConstraintsStaticList.push_back(constraint);
-          break;
+              CollisionConstraintStatic constraint;
+              constraint.pIdx = i;
+              TV tmp = hit.t * rayDir;
+              constraint.q = xi + tmp;
+              TV p1 = boatV.row(boatF(hit.id, 0)), p2 = boatV.row(boatF(hit.id, 1)), p3 = boatV.row(boatF(hit.id, 2));
+              constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
+              collisionConstraintsStaticList.push_back(constraint);
+              found = true;
+              break;
+            }
+          }
         }
+        else {
+          TV zAxis = {0, 0, 1};
+          if (!found && igl::ray_mesh_intersect(pi, zAxis, boatV, boatF, hits))
+          if(hits[0].t<=maxEdgeLength){
+//            std::cout << i << std::endl;
+            auto hit = hits[0];
+            CollisionConstraintStatic constraint;
+            constraint.pIdx = i;
+            TV tmp = hit.t * zAxis;
+            constraint.q = pi + tmp;
+            constraint.n = zAxis;
+            collisionConstraintsStaticList.push_back(constraint);
+          }
+        }
+        /*
+        //todo simply check if hits.size()%2!=0 instead
+        if(!found && hits.size()%2!=0)
+          std::cout<<i<<" "<<hits.size()<<std::endl;
+        if (!found && igl::ray_mesh_intersect(xi, -rayDir, boatV, boatF, hits)) {
+          std::cout<<i<<std::endl;
+          auto hit = hits[0];
+          CollisionConstraintStatic constraint;
+          constraint.pIdx = i;
+          TV tmp = -hit.t * rayDir;
+          constraint.q = xi + tmp;
+          TV p1 = boatV.row(boatF(hit.id, 0)), p2 = boatV.row(boatF(hit.id, 1)), p3 = boatV.row(boatF(hit.id, 2));
+          constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
+          collisionConstraintsStaticList.push_back(constraint);
+        }
+         */
       }
     }
+
+    std::cout<<collisionConstraintsStaticList.size()<<std::endl;
   }
 }
 void PBD::generateCollisionConstraints()

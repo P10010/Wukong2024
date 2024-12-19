@@ -182,13 +182,16 @@ private:
 
     static int isAbove(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3) ;
 
-    bool pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3, T thickness) const;
+    static bool pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3, T thickness) ;
+
+    T closestToPointInTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3, PBD::TV& closestPoint);
 
     bool edgesAreClose(const PBD::TV& x1, const PBD::TV& x2, const PBD::TV& x3, const PBD::TV& x4) const;
 
     void hashVertices(std::vector<std::vector<int>>& hashTable, T boxSize, TV& minCoord);
 
     void spatialHashing();
+    void spatialHashingStatic();
 public:
     void initializeFromFile(const std::string& filename);
 
