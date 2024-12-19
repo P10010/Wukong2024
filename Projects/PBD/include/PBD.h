@@ -166,6 +166,7 @@ public:
     bool floorCollision = true;
     bool fakeWindActivated = true;
     bool useXPBD = true;
+    T constantXVelocity=0.;
 
 private:
     int seed = 43854397;

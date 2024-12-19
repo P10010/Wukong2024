@@ -1370,12 +1370,13 @@ void PBD::applyFakeWind()
 bool PBD::advanceOneStep(int step)
 {
     //    std::cout<<step<<"\n";
+//    constantVelocity={constantXVelocity,0,0};
     // Pre-solve: apply external forces
     int nRows = currentV.rows();
     for (int i = 0; i < nRows; i++)
     {
         v.row(i) += dt * g;
-        v.row(i) += constantVelocity;
+        v.row(i).x() += constantXVelocity;
 
         if (fakeWindActivated)
         {
@@ -1393,7 +1394,7 @@ bool PBD::advanceOneStep(int step)
     }
 
     for(int i=0;i<boatV.rows();i++)
-      boatV.row(i)+=dt*constantVelocity;
+      boatV.row(i).x()+=dt*constantXVelocity;
 
     // for XPBD
     lambdas.setZero(constraint_idx.size());
@@ -1406,8 +1407,8 @@ bool PBD::advanceOneStep(int step)
 
     for (int i = 0; i < posConstraintsIdxs.rows(); ++i) {
       int idx = posConstraintsIdxs[i];
-      TV dp = constantVelocity * dt;
-      posConstraintsV.row(i) += dp;
+      T dp = constantXVelocity * dt;
+      posConstraintsV.row(i).x() += dp;
     }
     // Solve constraints
     for (int it = 0; it < numIterations; it++)
@@ -1422,7 +1423,7 @@ bool PBD::advanceOneStep(int step)
         currentV.row(i) = p.row(i);
     }
 
-    // TODO: velocity update
+    //velocity update
     applyFriction();
 
     if (step == nSteps)

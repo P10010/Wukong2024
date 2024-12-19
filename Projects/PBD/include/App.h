@@ -180,6 +180,11 @@ public:
         const size_t max_steps = 10000;
         ImGui::SliderScalar("Steps", ImGuiDataType_U64, &simulation.nSteps, &min_steps, &max_steps, "%d");
 
+        // Change constant velocity on the x axis
+        const double min_v = -1;
+        const double max_v = 1;
+        ImGui::SliderScalar("Velocity", ImGuiDataType_Double, &simulation.constantXVelocity, &min_v, &max_v, "%.5f");
+
         // Activate/Deactivate constraints
         ImGui::Checkbox("Position Constraints", &simulation.positionConstraintsActivated);
         ImGui::Checkbox("Stretching Constraints", &simulation.stretchingConstraintsActivated);
