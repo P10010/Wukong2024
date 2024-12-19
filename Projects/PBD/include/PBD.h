@@ -69,6 +69,12 @@ public:
     // positions, (V x 3)
     MatrixXT boatP;
 
+    //faces that are incident to each vertex
+    std::vector<std::vector<int>> adjFaces;
+
+    //(Vx3), for each vertex on the boat store
+//    MatrixXT boatVnormals;
+
     // velocities, (V x 3)
 //    MatrixXT v;
 
@@ -78,6 +84,7 @@ public:
     MatrixXi TTi;             // triangle-triangle adjacencies, (F x 3)
     MatrixXT dihedral_angles; // dihedral angles between between faces, (F x 3)
     MatrixXi edges;           // (E x 2)
+    MatrixXi boatEdges;           // (E x 2)
     VectorXT edge_lengths;    // (E x 2)
     MatrixXT atRest;          // initial positions (V x 3)
     MatrixXT currentV;        // vertex positions, 'x' in paper, (V x 3)
@@ -177,6 +184,7 @@ private:
 
     int prime1=73856093, prime2=19349663, prime3=83492791;
     float epsilon=0.001f;
+    //faces that are incident to each edge
     std::vector<std::vector<int>> incidentFaces;
     std::vector<std::vector<int>> adjList;
     int hash(int i, int j, int k, int n);
@@ -194,6 +202,13 @@ private:
 
     void spatialHashing();
     void spatialHashingStatic();
+
+    void edgeStaticConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize);
+
+    void faceStaticConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize);
+
+    void faceSelfCollisionConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize);
+
 public:
     void initializeFromFile(const std::string& filename);
 

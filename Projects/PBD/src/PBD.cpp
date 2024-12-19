@@ -6,6 +6,7 @@
 #include <igl/per_face_normals.h>
 #include <igl/readOBJ.h>
 #include <igl/triangle_triangle_adjacency.h>
+#include <igl/tri_tri_intersect.h>
 #include <random>
 #include <iomanip>
 
@@ -33,19 +34,6 @@ void PBD::initializeFromFile(const std::string& filename)
     //     V(i,2) += 10;
     // }
     // std::cout << "post V(59,0) = " << V.row(59)<< std::endl;
-
-    // TODO: necessary?
-    // these functions copy the V, F, that is, what was read on the obj, to the
-    // internal representation atRest and faces they were copied from
-    // DiscreteShell and also "fatten" it, but that is probably unnecessary for
-    // us. you could set the second parameter to 1 rather than 3 if you didn't
-    // want to fatten (but at that point it might be worth it creating another
-    // function in Util.h) you would probably need to change app.initializeScene
-    // too maybe fatten is actually necessary to give some "thickness" to the
-    // surface mesh? idk. Changing it breaks something else, I'll leave it as is
-    // for now
-    // iglMatrixFatten<T, 3>(V, atRest);
-    // iglMatrixFatten<int, 3>(F, faces);
 
     // normalize the mesh to fit in a unit cube
     // for (int i = 0; i < V.rows(); i++)
@@ -98,6 +86,14 @@ void PBD::initializeFromFile(const std::string& filename)
         w(i) = 1. / m(i);
     }
 
+    adjFaces=std::vector<std::vector<int>>(nRows);
+
+    for(int i=0;i<faces.rows();i++)
+      for(int j=0;j<faces.cols();j++) {
+        int vertex=faces(i,j);
+        adjFaces[vertex].push_back(i);
+      }
+
     igl::edges(F, edges);
     edge_lengths.resize(edges.rows());
     for (int i = 0; i < edges.rows(); i++)
@@ -108,6 +104,7 @@ void PBD::initializeFromFile(const std::string& filename)
         maxEdgeLength=std::max(edge_lengths(i),maxEdgeLength);
     }
 
+    igl::edges(boatF,boatEdges);
     MatrixXT normals(faces.rows(), 3);
     igl::per_face_normals(atRest, faces, normals);
     normals.rowwise().normalize();
@@ -438,7 +435,7 @@ void PBD::bendingConstraints(int solver_it)
     }
 }
 
-//is q below with respect to the triangle normal?
+//is q above the triangle (p1,p2,p3) with respect to the triangle normal?
 int PBD::isAbove(const PBD::TV& q, const PBD::TV& p1, const PBD::TV& p2, const PBD::TV& p3) {
     // Compute triangle normal
     TV cr = (p2 - p1).cross(p3 - p1);
@@ -479,18 +476,20 @@ T PBD::closestToPointInTriangle(const PBD::TV& q, const PBD::TV& p1, const PBD::
   //return squared norm of the distance
   return (closestPoint-q).squaredNorm();
 }
-// check whether point q intersects the triangle with vertices p1, p2, p3
+
+// check whether point q is closer than the given thickness to the triangle with vertices p1, p2, p3
 bool PBD::pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1,
                                   const PBD::TV& p2, const PBD::TV& p3, T thickness)
 {
     // Compute triangle normal
     TV cr = (p2 - p1).cross(p3 - p1);
     TV n = cr.normalized();
+
+    // Compute the distance of the point from the plane containing the triangle
     T dist = (q - p1).dot(n);
 
-    // note: if dist is small the point is close to the plane containing the
-    // triangle, but I need to do some extra checks to verify that is actually
-    // close to the triangle
+    // If the dist is greater than the thickness the point is not close to the plane
+    // containing the triangle
     if (abs( dist) > thickness)
         return false;
 
@@ -502,7 +501,7 @@ bool PBD::pointIntersectsTriangle(const PBD::TV& q, const PBD::TV& p1,
     TV2 b = {x13.dot(x43), x23.dot(x43)};
     TV2 w12 = A.colPivHouseholderQr().solve(b);
     T w3 = 1 - w12[0] - w12[1];
-    // δ is h divided by a characteristic length of the triangle, i.e. squared
+    // δ is the thickness divided by a characteristic length of the triangle, i.e. squared
     // root of the area
     T area = 0.5 * cr.norm();
     if (area == 0)
@@ -597,6 +596,57 @@ void PBD::hashVertices(std::vector<std::vector<int>>& hashTable, T boxSize,
 //    }
 }
 
+void PBD::faceSelfCollisionConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize){
+  for (int f = 0; f < faces.rows(); f++) {
+    int t1 = faces(f, 0), t2 = faces(f, 1), t3 = faces(f, 2);
+    TM triangleVertices;
+    TV p1 = p.row(t1), p2 = p.row(t2), p3 = p.row(t3);
+    triangleVertices << p1, p2, p3;
+    std::array<int, 3> minBox, maxBox;
+    for (int i = 0; i < 3; i++) {
+      TV tmp = triangleVertices.row(i);
+      minBox[i] = (int) std::floor(
+              (triangleVertices.row(i).minCoeff() - minCoord(i)) / boxSize);
+      maxBox[i] = (int) std::floor(
+              (triangleVertices.row(i).maxCoeff() - minCoord(i)) / boxSize);
+    }
+
+    for (int i = minBox[0]; i <= maxBox[0]; i++)
+      for (int j = minBox[1]; j <= maxBox[1]; j++)
+        for (int k = minBox[2]; k <= maxBox[2]; k++) {
+          int hashVal = hash(i, j, k, n);
+          for (int qIdx: hashTable[hashVal])
+            if(qIdx!=t1 && qIdx!=t2 && qIdx!=t3)
+              for(int f1 : adjFaces[qIdx]){
+                int idx1=faces(f1,0), idx2=faces(f1,1), idx3=faces(f1,2);
+                bool adj=false;
+                for(int j=0;j<3;j++)
+                  if(TT(f,j)==f1)
+                    adj=true;
+                if(!adj) {
+                  Eigen::Matrix<double, 1, 3> r1 = p.row(idx1).transpose(), r2 = p.row(
+                          faces(idx2)).transpose(), r3 = p.row(idx3).transpose();
+                  bool coplanar;
+                  Eigen::Matrix<double, 1, 3> src, target;
+                  Eigen::Matrix<double, 1, 3> p1T = p1.transpose(), p2T = p2.transpose(), p3T = p3.transpose();
+                  if (igl::tri_tri_intersection_test_3d(p1T, p2T, p3T, r1, r2, r3, coplanar, src, target))
+                  if(!coplanar){
+                    std::cout<<f<<" "<<f1<<std::endl;
+                    CollisionConstraint constraint;
+                    int qAbove = isAbove(p.row(qIdx), p1, p2, p3);
+                    constraint.qIdx = qIdx;
+                    constraint.f = faces.row(f);
+                    constraint.inBoat = false;
+                    constraint.fromBelow = -qAbove;
+                    constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
+                    collisionConstraintsList.push_back(constraint);
+                    break;
+                  }
+                }
+              }
+        }
+  }
+}
 void PBD::spatialHashing()
 {
     int nRows=currentV.rows();
@@ -616,7 +666,8 @@ void PBD::spatialHashing()
     std::vector<std::vector<int>> hashTable(n);
     hashVertices(hashTable, boxSize, minCoord);
 //    std::cout<<p.rows()<<std::endl;
-
+//    faceSelfCollisionConstraint(hashTable,minCoord,maxCoord,n,boxSize);
+//    return;
     for (int f = 0; f < faces.rows(); f++)
     {
         int t1 = faces(f, 0), t2 = faces(f, 1), t3 = faces(f, 2);
@@ -786,6 +837,113 @@ void PBD::spatialHashing()
 //        }
 //  }
 }
+
+void PBD::faceStaticConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize){
+  for (int f = 0; f < boatF.rows(); f++) {
+    int t1 = boatF(f, 0), t2 = boatF(f, 1), t3 = boatF(f, 2);
+    TM triangleVertices;
+    TV p1 = boatV.row(t1), p2 = boatV.row(t2), p3 = boatV.row(t3);
+    triangleVertices << p1, p2, p3;
+    std::array<int, 3> minBox{}, maxBox{};
+    for (int i = 0; i < 3; i++) {
+      TV tmp = triangleVertices.row(i);
+      minBox[i] = (int) std::floor(
+              (triangleVertices.row(i).minCoeff() - minCoord(i)) / boxSize);
+      if (minBox[i] < 0)
+        minBox[i] = 0;
+
+      if (triangleVertices.row(i).maxCoeff() > maxCoord(i))
+        maxBox[i] = (int) std::floor(
+                (maxCoord(i) - minCoord(i)) / boxSize);
+      else
+        maxBox[i] = (int) std::floor(
+                (triangleVertices.row(i).maxCoeff() - minCoord(i)) / boxSize);
+      //todo fix this properly
+      if (maxBox[i] < minBox[i])
+        maxBox[i] = minBox[i];
+    }
+
+    for (int i = minBox[0]; i <= maxBox[0]; i++)
+      for (int j = minBox[1]; j <= maxBox[1]; j++)
+        for (int k = minBox[2]; k <= maxBox[2]; k++) {
+          int hashVal = hash(i, j, k, n);
+          for (int qIdx: hashTable[hashVal])
+            for(int f1 : adjFaces[qIdx]){
+              Eigen::Matrix<double, 1, 3> r1 = p.row(faces(f1,0)).transpose(), r2 = p.row(faces(f1,1)).transpose(), r3 = p.row(faces(f1,2)).transpose();
+              bool coplanar;
+              Eigen::Matrix<double, 1, 3> src,target;
+              Eigen::Matrix<double, 1, 3> p1T=p1.transpose(), p2T=p2.transpose(), p3T=p3.transpose();
+              if(igl::tri_tri_intersection_test_3d(p1T,p2T,p3T,r1,r2,r3,coplanar,src,target)){
+                CollisionConstraintStatic constraint;
+                constraint.pIdx = qIdx;
+                constraint.q= src;
+                constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
+                collisionConstraintsStaticList.push_back(constraint);
+                break;
+              }
+            }
+        }
+  }
+}
+void PBD::edgeStaticConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord, int n, const T boxSize){
+  for (int e = 0; e < boatEdges.rows(); e++)
+  {
+    int a, b;
+    a = edges(e, 0);
+    b = edges(e, 1);
+    VMD::Matrix<T, 3, 2> edgeVertices;
+    TV p1=p.row(a), p2=p.row(b);
+    edgeVertices << p1,p2;
+    std::array<int, 3> minBox{}, maxBox{};
+
+    for (int i = 0; i < 3; i++)
+    {
+      TV2 tmp = edgeVertices.row(i);
+      minBox[i] = (int)std::floor(
+              (edgeVertices.row(i).minCoeff() - minCoord(i)) / boxSize);
+      if(minBox[i]<0)
+        minBox[i]=0;
+
+      if(edgeVertices.row(i).maxCoeff()>maxCoord(i))
+        maxBox[i] = (int)std::floor(
+                (maxCoord(i) - minCoord(i)) / boxSize);
+      else
+        maxBox[i] = (int)std::floor(
+                (edgeVertices.row(i).maxCoeff() - minCoord(i)) / boxSize);
+      //todo fix this properly
+      if(maxBox[i]<minBox[i])
+        maxBox[i]=minBox[i];
+    }
+//     std::cout << "minBox\n" << minBox[0] << " " << minBox[1] << " "
+//               << minBox[2] << std::endl;
+//     std::cout << "maxBox\n" << maxBox[0] << " " << maxBox[1] << " "
+//                 << maxBox[2] << std::endl;
+
+    for (int i = minBox[0]; i <= maxBox[0]; i++)
+      for (int j = minBox[1]; j <= maxBox[1]; j++)
+        for (int k = minBox[2]; k <= maxBox[2]; k++)
+        {
+          int hashVal = hash(i, j, k, n);
+          for (int qIdx : hashTable[hashVal])
+            for(int endPoint : adjList[qIdx])
+              if (qIdx != a && qIdx != b && endPoint!=a && endPoint!=b &&
+                  edgesAreClose(p.row(qIdx), p.row(endPoint), p1, p2))
+              {
+                CollisionConstraintStatic constraint;
+                constraint.pIdx = qIdx;
+                int f=incidentFaces[e][0];
+                int t1 = boatF(f, 0), t2 = boatF(f, 1), t3 = boatF(f, 2);
+                TM triangleVertices;
+                TV p1 = boatV.row(t1), p2 = boatV.row(t2), p3 = boatV.row(t3);
+//                constraint.n=
+                collisionConstraintsStaticList.push_back(constraint);
+
+                constraint.pIdx = endPoint;
+                collisionConstraintsStaticList.push_back(constraint);
+              }
+        }
+  }
+}
 void PBD::spatialHashingStatic() {
   int nRows = currentV.rows();
   TV minCoord = p.colwise().minCoeff();
@@ -803,6 +961,9 @@ void PBD::spatialHashingStatic() {
   int n = 4 * (p.rows());
   std::vector<std::vector<int>> hashTable(n);
   hashVertices(hashTable, boxSize, minCoord);
+
+  faceStaticConstraint(hashTable,minCoord,maxCoord,n,boxSize);
+  return;
 
   //for all the segments xi->pi that lie completely inside the mesh, find the closest point on the mesh
   std::vector<CollisionConstraintStatic> closestPoints(p.rows());
