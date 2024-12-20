@@ -175,16 +175,18 @@ public:
     T constantXVelocity=0.;
 
 private:
+    int nRows;
     int seed = 43854397;
     std::mt19937 gen = std::mt19937(seed);
     std::uniform_int_distribution<int> dist10;
     std::uniform_int_distribution<int> distV;
     std::uniform_int_distribution<int> distF;
 
-
+    //prime numbers used for hashing
     int prime1=73856093, prime2=19349663, prime3=83492791;
     float epsilon=0.001f;
-    //faces that are incident to each edge
+
+    //faces that are incident to each edge (for edge-edge collision detection, not used in the final version)
     std::vector<std::vector<int>> incidentFaces;
     std::vector<std::vector<int>> adjList;
     int hash(int i, int j, int k, int n);
@@ -203,12 +205,28 @@ private:
     void spatialHashing();
     void spatialHashingStatic();
 
+    void findStaticCollisions(std::vector<bool> toCheck);
+
+    /*
+     * Methods that are not used in the final version
+     */
+
     void edgeStaticConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize);
+
+    void edgeSelfCollisionConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize);
+
+    void hashBoatVertices(std::vector<std::vector<int>>& hashTable, T boxSize,
+                               TV& minCoord);
 
     void faceStaticConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize);
 
     void faceSelfCollisionConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize);
 
+    void generateBoatDynamicCollisionConstraints(int i);
+
+    void checkStaticCollision(int qIdx, int f, const TV& p1, const TV& p2, const TV& p3, std::vector<int>& rayInsideMesh, std::vector<CollisionConstraintStatic>& closestPoints);
+
+    void closestPointOnSurface(int i);
 public:
     void initializeFromFile(const std::string& filename);
 

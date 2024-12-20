@@ -198,9 +198,7 @@ public:
         if (!animate_modes && run_sim)
         {
             bool finished = simulation.advanceOneStep(static_solve_step++);
-            Eigen::MatrixXd meshV = simulation.currentV;
-            // TODO: why was this necessary?
-            // vectorToIGLMatrix<T, 3>(simulation.currentV, meshV);
+            Eigen::MatrixXd meshV= simulation.currentV;
             psMesh->updateVertexPositions(meshV);
             Eigen::MatrixXd boatMeshV=simulation.boatV;
             boatMesh->updateVertexPositions(boatMeshV);
