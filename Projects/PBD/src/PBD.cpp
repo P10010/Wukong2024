@@ -597,6 +597,7 @@ void PBD::hashVertices(std::vector<std::vector<int>>& hashTable, T boxSize,
 }
 
 void PBD::faceSelfCollisionConstraint(std::vector<std::vector<int>>& hashTable, const TV& minCoord, const TV& maxCoord,  int n, const T boxSize){
+  std::vector<std::vector<bool>> faceFaceVis(faces.rows(),std::vector<bool>(faces.rows(),false));
   for (int f = 0; f < faces.rows(); f++) {
     int t1 = faces(f, 0), t2 = faces(f, 1), t3 = faces(f, 2);
     TM triangleVertices;
@@ -610,42 +611,63 @@ void PBD::faceSelfCollisionConstraint(std::vector<std::vector<int>>& hashTable, 
       maxBox[i] = (int) std::floor(
               (triangleVertices.row(i).maxCoeff() - minCoord(i)) / boxSize);
     }
-
+    std::vector<bool> vis(p.rows(),false);
     for (int i = minBox[0]; i <= maxBox[0]; i++)
       for (int j = minBox[1]; j <= maxBox[1]; j++)
         for (int k = minBox[2]; k <= maxBox[2]; k++) {
           int hashVal = hash(i, j, k, n);
-          for (int qIdx: hashTable[hashVal])
-            if(qIdx!=t1 && qIdx!=t2 && qIdx!=t3)
-              for(int f1 : adjFaces[qIdx]){
-                int idx1=faces(f1,0), idx2=faces(f1,1), idx3=faces(f1,2);
-                bool adj=false;
-                for(int j=0;j<3;j++)
-                  if(TT(f,j)==f1)
-                    adj=true;
-                if(!adj) {
+          for (int l=0;l<hashTable[hashVal].size() && !vis[hashTable[hashVal][l]];l++) {
+            int qIdx=hashTable[hashVal][l];
+            vis[qIdx]=true;
+            if (qIdx != t1 && qIdx != t2 && qIdx != t3)
+              for (int f1: adjFaces[qIdx]) {
+                int idx1 = faces(f1, 0), idx2 = faces(f1, 1), idx3 = faces(f1, 2);
+                bool adj = false;
+                for (int idx = 0; idx < 3; idx++)
+                  if (TT(f, idx) == f1)
+                    adj = true;
+                for (int ii = 0; ii < 3 && !adj; ii++)
+                  for (int jj = 0; jj < 3 && !adj; jj++)
+                    adj = (faces(f, ii) == faces(f1, jj));
+                if (!adj && !faceFaceVis[f][f1]) {
+                  faceFaceVis[f][f1]=true;
                   Eigen::Matrix<double, 1, 3> r1 = p.row(idx1).transpose(), r2 = p.row(
-                          faces(idx2)).transpose(), r3 = p.row(idx3).transpose();
+                          (idx2)).transpose(), r3 = p.row(idx3).transpose();
                   bool coplanar;
                   Eigen::Matrix<double, 1, 3> src, target;
                   Eigen::Matrix<double, 1, 3> p1T = p1.transpose(), p2T = p2.transpose(), p3T = p3.transpose();
                   if (igl::tri_tri_intersection_test_3d(p1T, p2T, p3T, r1, r2, r3, coplanar, src, target))
-                  if(!coplanar){
-                    std::cout<<f<<" "<<f1<<std::endl;
-                    CollisionConstraint constraint;
-                    int qAbove = isAbove(p.row(qIdx), p1, p2, p3);
-                    constraint.qIdx = qIdx;
-                    constraint.f = faces.row(f);
-                    constraint.inBoat = false;
-                    constraint.fromBelow = -qAbove;
-                    constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
-                    collisionConstraintsList.push_back(constraint);
-                    break;
-                  }
+                    if (!coplanar) {
+                      std::cout << f << " " << f1 << " " << qIdx << " " << i << " " << j << " " << k << " " << hashVal
+                                << std::endl;
+//                    if(f==848) {
+//                      std::cout << p1T << " " << p2T << " " << p3T << "\n";
+//                      std::cout << r1 << " " << r2 << " " << r3 << "\n";
+//                      std::cout << src(0) << " " << src(1) << " " << src(2) << std::endl;
+//
+//                      for (int ii = 0; ii < 3; ii++)
+//                        std::cout << faces(f1, ii) << " ";
+//                      std::cout << std::endl;
+//                      for (int ii = 0; ii < 3; ii++)
+//                        std::cout << faces(f, ii) << " ";
+//                      std::cout << std::endl;
+//                    }
+                      CollisionConstraint constraint;
+                      int qAbove = isAbove(p.row(qIdx), p1, p2, p3);
+                      constraint.qIdx = qIdx;
+                      constraint.f = faces.row(f);
+                      constraint.inBoat = false;
+                      constraint.fromBelow = -qAbove;
+                      constraint.n = ((p2 - p1).cross(p3 - p1)).normalized();
+                      collisionConstraintsList.push_back(constraint);
+                      break;
+                    }
                 }
               }
+          }
         }
   }
+  std::cout<<collisionConstraintsList.size()<<"\n";
 }
 void PBD::spatialHashing()
 {
@@ -666,8 +688,8 @@ void PBD::spatialHashing()
     std::vector<std::vector<int>> hashTable(n);
     hashVertices(hashTable, boxSize, minCoord);
 //    std::cout<<p.rows()<<std::endl;
-//    faceSelfCollisionConstraint(hashTable,minCoord,maxCoord,n,boxSize);
-//    return;
+    faceSelfCollisionConstraint(hashTable,minCoord,maxCoord,n,boxSize);
+    return;
     for (int f = 0; f < faces.rows(); f++)
     {
         int t1 = faces(f, 0), t2 = faces(f, 1), t3 = faces(f, 2);
