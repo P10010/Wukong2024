@@ -167,6 +167,72 @@ void PBD::initializeFromFile(const std::string& filename)
     distF = std::uniform_int_distribution<int>(0, F.rows() - 1);
 }
 
+/*
+ * Perform one step of the simulation
+ */
+bool PBD::advanceOneStep(int step)
+{
+  //    std::cout<<step<<"\n";
+  // Pre-solve: apply external forces
+  for (int i = 0; i < nRows; i++)
+  {
+    v.row(i) += dt * g;
+    v.row(i).x() += constantXVelocity;
+
+    if (fakeWindActivated)
+    {
+      int wind = dist10(gen);
+      if (wind == 10) applyFakeWind();
+    }
+  }
+
+  dampVelocities(k_damping);
+
+  for (int i = 0; i < nRows; i++)
+  {
+    // Verlet integration, as in paper
+    p.row(i) = currentV.row(i) + dt * v.row(i);
+
+  }
+
+  for(int i=0;i<boatV.rows();i++)
+    boatV.row(i).x()+=dt*constantXVelocity;
+
+  // for XPBD
+  lambdas.setZero(constraint_idx.size());
+
+  // generate collision constraints
+  if (collisionConstraintsActivated) {
+    generateCollisionConstraints();
+    generateCollisionConstraintsStatic();
+  }
+
+  for (int i = 0; i < posConstraintsIdxs.rows(); ++i) {
+    int idx = posConstraintsIdxs[i];
+    T dp = constantXVelocity * dt;
+    posConstraintsV.row(i).x() += dp;
+  }
+  // Solve constraints
+  for (int it = 0; it < numIterations; it++)
+  {
+    projectConstraints(it);
+  }
+
+  // Post-solve: update velocities
+  for (int i = 0; i < nRows; i++)
+  {
+    v.row(i) << (p.row(i) - currentV.row(i)) * 1. / dt;
+    currentV.row(i) = p.row(i);
+  }
+
+  //velocity update
+  applyFriction();
+
+  if (step == nSteps)
+    return true;
+  return false;
+}
+
 void PBD::stretchingConstraintsXPBD()
 {
     for (int i = 0; i < edges.rows(); i++)
@@ -702,8 +768,8 @@ void PBD::spatialHashingStatic() {
   hashVertices(hashTable, boxSize, minCoord);
 
   // STRATEGY 1: use triangle triangle intersection tests
-//  faceStaticConstraint(hashTable,minCoord,maxCoord,n,boxSize);
-//  return;
+  faceStaticConstraint(hashTable,minCoord,maxCoord,n,boxSize);
+  return;
 
   /* STRATEGY 2:
    * for all the segments xi->pi that lie completely inside the mesh, find the closest point on the mesh
@@ -1089,71 +1155,7 @@ void PBD::applyFakeWind()
     }
 }
 
-/*
- * Perform one step of the simulation
- */
-bool PBD::advanceOneStep(int step)
-{
-    //    std::cout<<step<<"\n";
-    // Pre-solve: apply external forces
-    for (int i = 0; i < nRows; i++)
-    {
-        v.row(i) += dt * g;
-        v.row(i).x() += constantXVelocity;
 
-        if (fakeWindActivated)
-        {
-            int wind = dist10(gen);
-            if (wind == 10) applyFakeWind();
-        }
-    }
-
-    dampVelocities(k_damping);
-
-    for (int i = 0; i < nRows; i++)
-    {
-        // Verlet integration, as in paper
-        p.row(i) = currentV.row(i) + dt * v.row(i);
-
-    }
-
-    for(int i=0;i<boatV.rows();i++)
-      boatV.row(i).x()+=dt*constantXVelocity;
-
-    // for XPBD
-    lambdas.setZero(constraint_idx.size());
-
-    // generate collision constraints
-    if (collisionConstraintsActivated) {
-      generateCollisionConstraints();
-      generateCollisionConstraintsStatic();
-    }
-
-    for (int i = 0; i < posConstraintsIdxs.rows(); ++i) {
-      int idx = posConstraintsIdxs[i];
-      T dp = constantXVelocity * dt;
-      posConstraintsV.row(i).x() += dp;
-    }
-    // Solve constraints
-    for (int it = 0; it < numIterations; it++)
-    {
-        projectConstraints(it);
-    }
-
-    // Post-solve: update velocities
-    for (int i = 0; i < nRows; i++)
-    {
-        v.row(i) << (p.row(i) - currentV.row(i)) * 1. / dt;
-        currentV.row(i) = p.row(i);
-    }
-
-    //velocity update
-    applyFriction();
-
-    if (step == nSteps)
-        return true;
-    return false;
-}
 
 /*
  * Methods that are not used in the final version
