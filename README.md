@@ -31,11 +31,11 @@ Some issues, like not finding `uint64_t` or a missing `cast`, can be fixed "manu
 
 `libmetis` is part of apt. If your distro, does not have a libmetis package, you can build it manually from here https://github.com/KarypisLab/METIS. First you need a library called GKlib (it's explained there) AND you should follow the steps they suggested in this issue https://github.com/KarypisLab/METIS/issues/83
 
-Run the project with the boat scene we have set up (from the `build` directory):
+Run the project with the boat scene we have set up (from the `build/Projects/PBD` directory):
 
-> $ cd build
+> $ cd build/Projects/PBD
 > 
-> $ ./Projects/PBD/PBD ../Projects/PBD/data/sailboat/parts/sail.obj
+> $ ./PBD ../../../Projects/PBD/data/sailboat/parts/sail.obj
 
 Building has been tested with GCC 11.
 
